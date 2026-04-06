@@ -6,6 +6,7 @@
   POST /api/finish?session_id=<id>        → {"language": "<lang>", "text": "<final>"}
 
 音訊格式：Float32 binary，16kHz，mono
+注意：transformers backend 不支援 streaming ASR，改用累積音訊後批次辨識。
 環境變數：
   MODEL_NAME  本地模型路徑或 HuggingFace model ID
   PORT        HTTP port（預設 8001）
@@ -26,7 +27,7 @@ DEVICE = os.environ.get("DEVICE", "cpu")
 app = FastAPI(title="Qwen3-ASR Streaming Server")
 
 _model = None
-_sessions: dict[str, object] = {}
+_sessions: dict[str, list] = {}  # session_id → list of audio chunks
 
 
 @app.on_event("startup")
@@ -47,8 +48,7 @@ async def load_model():
 @app.post("/api/start")
 async def start_session():
     session_id = uuid.uuid4().hex
-    state = _model.init_streaming_state(language="zh")
-    _sessions[session_id] = state
+    _sessions[session_id] = []
     return {"session_id": session_id}
 
 
@@ -59,12 +59,17 @@ async def process_chunk(request: Request, session_id: str = Query(...)):
 
     body = await request.body()
     audio = np.frombuffer(body, dtype=np.float32).copy()
+    _sessions[session_id].append(audio)
 
-    state = _sessions[session_id]
-    state = _model.streaming_transcribe(audio, state)
-    _sessions[session_id] = state
+    # 批次辨識累積的全部音訊
+    accumulated = np.concatenate(_sessions[session_id])
+    results = _model.transcribe((accumulated, 16000), language="zh")
+    result = results[0] if results else None
 
-    return {"language": state.language, "text": state.text}
+    return {
+        "language": result.language if result else "zh",
+        "text": result.text if result else "",
+    }
 
 
 @app.post("/api/finish")
@@ -72,10 +77,18 @@ async def finish_session(session_id: str = Query(...)):
     if session_id not in _sessions:
         return JSONResponse({"error": "invalid session"}, status_code=400)
 
-    state = _sessions.pop(session_id)
-    state = _model.finish_streaming_transcribe(state)
+    chunks = _sessions.pop(session_id)
+    if not chunks:
+        return {"language": "zh", "text": ""}
 
-    return {"language": state.language, "text": state.text}
+    accumulated = np.concatenate(chunks)
+    results = _model.transcribe((accumulated, 16000), language="zh")
+    result = results[0] if results else None
+
+    return {
+        "language": result.language if result else "zh",
+        "text": result.text if result else "",
+    }
 
 
 @app.get("/health")
