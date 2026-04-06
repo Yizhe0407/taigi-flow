@@ -5,6 +5,11 @@ from __future__ import annotations
 import asyncio
 import logging
 
+# 在所有 livekit import 之前載入 .env.local 到 os.environ
+# livekit-agents 直接讀 LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+from dotenv import load_dotenv
+load_dotenv(".env.local")
+
 import uvicorn
 from livekit import agents
 from livekit.agents import AgentSession, TurnHandlingOptions
