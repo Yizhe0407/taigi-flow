@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 # 在所有 livekit import 之前載入 .env.local 到 os.environ
@@ -11,39 +10,27 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[2] / ".env.local")
 
-import uvicorn
 from livekit import agents
-from livekit.agents import AgentSession, TurnHandlingOptions
+from livekit.agents import AgentSession, TurnHandlingOptions, WorkerOptions
 from livekit.plugins import silero
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
 from taigi_flow.agent import TaigiAgent
 from taigi_flow.config import Settings
 from taigi_flow.factory import ComponentFactory
-from taigi_flow.monitoring import dashboard_app, metrics, setup_tracing, shutdown_tracing
+from taigi_flow.monitoring import metrics
 from taigi_flow.monitoring.dashboard import register_session, unregister_session
 
 logger = logging.getLogger(__name__)
 
 settings = Settings()
 factory = ComponentFactory()
-server = agents.AgentServer()
 
 
-async def _start_dashboard() -> None:
-    """在背景啟動監控後台（FastAPI + Prometheus /metrics）。"""
-    config = uvicorn.Config(
-        dashboard_app,
-        host="0.0.0.0",
-        port=settings.metrics_port,
-        log_level="warning",
-    )
-    userver = uvicorn.Server(config)
-    await userver.serve()
+async def entrypoint(ctx: agents.JobContext) -> None:
+    """有人連入 room 時自動呼叫。"""
+    await ctx.connect()
 
-
-@server.rtc_session(agent_name="taigi-agent")
-async def taigi_session(ctx: agents.JobContext) -> None:
     session_id = ctx.room.name
     logger.info(
         "New session: room=%s, stt=%s, llm=%s, tts=%s, converter=%s",
@@ -95,19 +82,5 @@ async def taigi_session(ctx: agents.JobContext) -> None:
         logger.info("Session ended: %s", session_id)
 
 
-async def _main() -> None:
-    if settings.enable_tracing:
-        setup_tracing(settings.otlp_endpoint)
-
-    dashboard_task = asyncio.create_task(_start_dashboard())
-    logger.info("Dashboard started on port %d", settings.metrics_port)
-
-    try:
-        await server.run()
-    finally:
-        dashboard_task.cancel()
-        shutdown_tracing()
-
-
 if __name__ == "__main__":
-    agents.cli.run_app(server)
+    agents.cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint))
