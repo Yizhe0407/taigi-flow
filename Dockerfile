@@ -22,4 +22,4 @@ COPY src/ ./src/
 # 安裝依賴（不含 dev）
 RUN uv pip install --system -e .
 
-CMD ["python", "-m", "taigi_flow.main", "start"]
+CMD ["taigi-flow", "start"]

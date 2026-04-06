@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Pulling Qwen3.5 9B model into Ollama..."
+MODEL="frob/qwen3.5-instruct:4b"
+
+echo "Pulling non-thinking Qwen3.5 4B model into Ollama: ${MODEL}"
 
 if command -v ollama &>/dev/null; then
-    ollama pull qwen3.5:9b
+    ollama pull "${MODEL}"
 else
-    docker compose exec ollama ollama pull qwen3.5:9b
+    docker compose exec ollama ollama pull "${MODEL}"
 fi
 
 echo "Done. Verify with:"

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
-from unittest.mock import patch
 
 import pytest
 

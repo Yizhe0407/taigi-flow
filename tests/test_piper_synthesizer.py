@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import io
-import struct
 import wave
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from taigi_flow.tts.piper import PiperSynthesizer
@@ -41,17 +41,14 @@ class TestPiperSynthesizer:
         synth = self._synth()
         wav_bytes = _make_wav(sample_rate=22050, duration_samples=22050)  # 1 second
 
-        # mock httpx.AsyncClient.stream
         mock_response = AsyncMock()
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-        mock_response.raise_for_status = MagicMock()
-        mock_response.aiter_bytes = AsyncMock(return_value=_async_iter([wav_bytes]))
+        mock_response.is_error = False
+        mock_response.aread = AsyncMock(return_value=wav_bytes)
 
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream = MagicMock(return_value=mock_response)
+        mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("taigi_flow.tts.piper.httpx.AsyncClient", return_value=mock_client):
             frames = [f async for f in synth.synthesize_frames("taibun text")]
@@ -61,29 +58,80 @@ class TestPiperSynthesizer:
         for frame in frames:
             assert frame.sample_rate == 22050
             assert frame.num_channels == 1
-            assert frame.samples_per_channel == 22050 * 20 // 1000
+            assert frame.samples_per_channel == 22050 * 40 // 1000
 
     @pytest.mark.asyncio
     async def test_incomplete_wav_yields_nothing(self):
         synth = self._synth()
 
         mock_response = AsyncMock()
-        mock_response.__aenter__ = AsyncMock(return_value=mock_response)
-        mock_response.__aexit__ = AsyncMock(return_value=None)
-        mock_response.raise_for_status = MagicMock()
-        mock_response.aiter_bytes = AsyncMock(return_value=_async_iter([b"\x00" * 10]))
+        mock_response.is_error = False
+        mock_response.aread = AsyncMock(return_value=b"\x00" * 10)
 
         mock_client = AsyncMock()
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
         mock_client.__aexit__ = AsyncMock(return_value=None)
-        mock_client.stream = MagicMock(return_value=mock_response)
+        mock_client.post = AsyncMock(return_value=mock_response)
 
         with patch("taigi_flow.tts.piper.httpx.AsyncClient", return_value=mock_client):
             frames = [f async for f in synth.synthesize_frames("hello")]
 
         assert frames == []
 
+    @pytest.mark.asyncio
+    async def test_http_error_includes_response_detail(self):
+        synth = self._synth()
 
-async def _async_iter(items):
-    for item in items:
-        yield item
+        request = httpx.Request("POST", "http://localhost:5000/v1/audio/speech")
+        mock_response = AsyncMock()
+        mock_response.is_error = True
+        mock_response.status_code = 404
+        mock_response.request = request
+        mock_response.aread = AsyncMock(return_value=b'{"detail":"Voice not found"}')
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("taigi_flow.tts.piper.httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(httpx.HTTPStatusError, match="Voice not found"),
+        ):
+            frames = [f async for f in synth.synthesize_frames("hello")]
+            assert frames == []
+
+    @pytest.mark.asyncio
+    async def test_remote_protocol_error_is_wrapped_as_runtime_error(self):
+        synth = self._synth()
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.post = AsyncMock(side_effect=httpx.RemoteProtocolError("boom"))
+
+        with (
+            patch("taigi_flow.tts.piper.httpx.AsyncClient", return_value=mock_client),
+            pytest.raises(RuntimeError, match="Piper stream closed unexpectedly"),
+        ):
+            frames = [f async for f in synth.synthesize_frames("li2 ho2")]
+            assert frames == []
+
+    @pytest.mark.asyncio
+    async def test_client_is_reused_between_requests(self):
+        synth = self._synth()
+
+        wav_bytes = _make_wav(sample_rate=22050, duration_samples=2205)
+        mock_response = AsyncMock()
+        mock_response.is_error = False
+        mock_response.aread = AsyncMock(return_value=wav_bytes)
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("taigi_flow.tts.piper.httpx.AsyncClient", return_value=mock_client) as client_cls:
+            _ = [f async for f in synth.synthesize_frames("li2 ho2")]
+            _ = [f async for f in synth.synthesize_frames("gua2 si7")]
+
+        client_cls.assert_called_once()
+        assert mock_client.post.await_count == 2

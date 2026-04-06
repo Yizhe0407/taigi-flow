@@ -15,6 +15,7 @@
 
 import os
 import uuid
+from contextlib import asynccontextmanager
 
 import numpy as np
 from fastapi import FastAPI, Query, Request
@@ -23,15 +24,14 @@ from fastapi.responses import JSONResponse
 MODEL_NAME = os.environ.get("MODEL_NAME", "/model/checkpoint-20340")
 PORT = int(os.environ.get("PORT", "8001"))
 DEVICE = os.environ.get("DEVICE", "cpu")
-
-app = FastAPI(title="Qwen3-ASR Streaming Server")
+TRANSCRIBE_LANGUAGE = os.environ.get("QWEN_ASR_LANGUAGE", "Chinese")
 
 _model = None
 _sessions: dict[str, list] = {}  # session_id → list of audio chunks
 
 
-@app.on_event("startup")
-async def load_model():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global _model
     from qwen_asr import Qwen3ASRModel
 
@@ -43,6 +43,10 @@ async def load_model():
         kwargs["device_map"] = "mps"
     _model = Qwen3ASRModel.from_pretrained(MODEL_NAME, **kwargs)
     print(f"Model loaded: {MODEL_NAME}")
+    yield
+
+
+app = FastAPI(title="Qwen3-ASR Streaming Server", lifespan=lifespan)
 
 
 @app.post("/api/start")
@@ -63,11 +67,11 @@ async def process_chunk(request: Request, session_id: str = Query(...)):
 
     # 批次辨識累積的全部音訊
     accumulated = np.concatenate(_sessions[session_id])
-    results = _model.transcribe((accumulated, 16000), language="zh")
+    results = _model.transcribe((accumulated, 16000), language=TRANSCRIBE_LANGUAGE)
     result = results[0] if results else None
 
     return {
-        "language": result.language if result else "zh",
+        "language": result.language if result else TRANSCRIBE_LANGUAGE,
         "text": result.text if result else "",
     }
 
@@ -79,21 +83,26 @@ async def finish_session(session_id: str = Query(...)):
 
     chunks = _sessions.pop(session_id)
     if not chunks:
-        return {"language": "zh", "text": ""}
+        return {"language": TRANSCRIBE_LANGUAGE, "text": ""}
 
     accumulated = np.concatenate(chunks)
-    results = _model.transcribe((accumulated, 16000), language="zh")
+    results = _model.transcribe((accumulated, 16000), language=TRANSCRIBE_LANGUAGE)
     result = results[0] if results else None
 
     return {
-        "language": result.language if result else "zh",
+        "language": result.language if result else TRANSCRIBE_LANGUAGE,
         "text": result.text if result else "",
     }
 
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": MODEL_NAME, "device": DEVICE}
+    return {
+        "status": "ok",
+        "model": MODEL_NAME,
+        "device": DEVICE,
+        "language": TRANSCRIBE_LANGUAGE,
+    }
 
 
 if __name__ == "__main__":

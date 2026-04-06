@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from livekit.agents import stt, llm
-from livekit.plugins import openai
+from taigi_flow.llm import OllamaLLM
 
 if TYPE_CHECKING:
     from taigi_flow.config import Settings
@@ -28,16 +28,6 @@ class ComponentFactory:
                 from taigi_flow.stt.qwen_asr import QwenASRSTT
 
                 return QwenASRSTT(base_url=settings.qwen_asr_url)
-            case "funasr":
-                from taigi_flow.stt.funasr import FunASRSTT
-
-                chunk_size = [int(x) for x in settings.funasr_chunk_size.split(",")]
-                return FunASRSTT(
-                    ws_url=settings.funasr_ws_url,
-                    mode=settings.funasr_mode,
-                    chunk_size=chunk_size,
-                    chunk_interval=settings.funasr_chunk_interval,
-                )
             case _:
                 raise ValueError(f"Unknown STT backend: {settings.stt_backend}")
 
@@ -45,10 +35,10 @@ class ComponentFactory:
     def create_llm(settings: Settings) -> llm.LLM:
         match settings.llm_backend:
             case "ollama":
-                return openai.LLM(
+                return OllamaLLM(
                     base_url=settings.llm_base_url,
                     model=settings.llm_model,
-                    api_key="ollama",
+                    request_timeout_seconds=settings.llm_timeout_seconds,
                 )
             case _:
                 raise ValueError(f"Unknown LLM backend: {settings.llm_backend}")

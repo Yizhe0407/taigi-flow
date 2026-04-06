@@ -25,10 +25,22 @@ def setup_tracing(otlp_endpoint: str, service_name: str = "taigi-flow") -> None:
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+        # Suppress retry WARNING spam when the collector is temporarily unavailable.
+        # Actual failures still surface as ERROR.
+        logging.getLogger("opentelemetry.exporter.otlp.proto.grpc.exporter").setLevel(
+            logging.ERROR
+        )
+
         resource = Resource.create({"service.name": service_name})
         provider = TracerProvider(resource=resource)
-        exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True)
-        provider.add_span_processor(BatchSpanProcessor(exporter))
+        exporter = OTLPSpanExporter(endpoint=otlp_endpoint, insecure=True, timeout=5)
+        provider.add_span_processor(
+            BatchSpanProcessor(
+                exporter,
+                export_timeout_millis=5000,   # fail fast instead of 30s default
+                schedule_delay_millis=10000,  # batch every 10s
+            )
+        )
         trace.set_tracer_provider(provider)
         _tracer_provider = provider
         logger.info("OpenTelemetry tracing enabled (endpoint=%s)", otlp_endpoint)

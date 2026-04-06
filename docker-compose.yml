@@ -28,22 +28,7 @@ services:
   # === Qwen3-ASR Streaming Server（STT）===
   # 基於 QwenLM/Qwen3-ASR 的 demo_streaming.py，提供 HTTP chunk API
   # API: POST /api/start  /api/chunk  /api/finish
-  # CPU（開發/Mac 預設）
   qwen-asr:
-    build:
-      context: ./qwen-asr-server
-      dockerfile: Dockerfile
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./models/qwen3-asr:/model
-    environment:
-      - MODEL_NAME=/model/checkpoint-20340
-      - PORT=8001
-      - DEVICE=cpu
-
-  # GPU（生產部署，需 NVIDIA）
-  qwen-asr-gpu:
     build:
       context: ./qwen-asr-server
       dockerfile: Dockerfile.gpu
@@ -55,8 +40,6 @@ services:
       - MODEL_NAME=/model/checkpoint-20340
       - PORT=8001
       - DEVICE=cuda
-    profiles:
-      - production
     deploy:
       resources:
         reservations:
@@ -65,6 +48,22 @@ services:
               count: 1
               capabilities: [gpu]
 
+  # CPU fallback（只有沒有 NVIDIA GPU 時才手動啟動）
+  qwen-asr-cpu:
+    build:
+      context: ./qwen-asr-server
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./models/qwen3-asr:/model
+    environment:
+      - MODEL_NAME=/model/checkpoint-20340
+      - PORT=8001
+      - DEVICE=cpu
+    profiles:
+      - cpu-fallback
+
   # === Piper TTS HTTP Server ===
   piper-tts:
     build:
@@ -72,7 +71,7 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - piper_data:/data
+      - ./piper-tts-http-server/data:/data
     environment:
       - DATA_DIR=/data
       - PORT=5000
@@ -84,11 +83,14 @@ services:
       dockerfile: Dockerfile
     env_file:
       - .env.local
+    environment:
+      - OTLP_ENDPOINT=http://tempo:4317   # 容器內用 service name，覆蓋 .env.local
     depends_on:
       - livekit-server
       - qwen-asr
       - ollama
       - piper-tts
+      - tempo
     profiles:
       - production   # 預設不啟動，需明確指定：docker compose --profile production up
 
@@ -100,6 +102,19 @@ services:
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux 相容性（Mac/Windows 預設已有）
+
+  # === Grafana Tempo（接收 OpenTelemetry traces）===
+  tempo:
+    image: grafana/tempo:latest
+    command: ["-config.file=/etc/tempo.yml"]
+    ports:
+      - "4317:4317"   # OTLP gRPC（Agent 送 trace 用，開發時 localhost:4317）
+      - "3200:3200"   # Tempo HTTP API（Grafana 查詢用）
+    volumes:
+      - ./monitoring/tempo.yml:/etc/tempo.yml
+      - tempo_data:/var/tempo
 
   # === Grafana ===
   grafana:
@@ -108,12 +123,16 @@ services:
       - "3000:3000"
     volumes:
       - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
       - grafana_data:/var/lib/grafana
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - tempo
 
 volumes:
   ollama_data:
-  piper_data:
   prometheus_data:
+  tempo_data:
   grafana_data:

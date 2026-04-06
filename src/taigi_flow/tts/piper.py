@@ -10,7 +10,10 @@ from collections.abc import AsyncIterable
 import httpx
 from livekit import rtc
 
+from taigi_flow.text_safety import sanitize_piper_text
+
 logger = logging.getLogger(__name__)
+_FRAME_DURATION_MS = 40
 
 
 class PiperSynthesizer:
@@ -45,15 +48,25 @@ class PiperSynthesizer:
         self._speed = speed
         self._noise_scale = noise_scale
         self._noise_scale_w = noise_scale_w
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            self._client = httpx.AsyncClient(
+                timeout=30.0,
+                limits=httpx.Limits(max_keepalive_connections=1, max_connections=4),
+            )
+        return self._client
 
     async def synthesize_frames(self, text: str) -> AsyncIterable[rtc.AudioFrame]:
         """將 Taibun 文字送至 Piper HTTP server，回傳 AudioFrame 串流。"""
-        if not text.strip():
+        text = sanitize_piper_text(text)
+        if not text:
             return
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            async with client.stream(
-                "POST",
+        client = self._get_client()
+        try:
+            resp = await client.post(
                 f"{self._base_url}/v1/audio/speech",
                 json={
                     "model": self._voice,
@@ -64,11 +77,23 @@ class PiperSynthesizer:
                     "noise_scale": self._noise_scale,
                     "noise_scale_w": self._noise_scale_w,
                 },
-            ) as resp:
-                resp.raise_for_status()
-                raw = bytearray()
-                async for chunk in resp.aiter_bytes(chunk_size=4096):
-                    raw.extend(chunk)
+            )
+            raw = await resp.aread()
+        except httpx.RemoteProtocolError as exc:
+            raise RuntimeError(
+                f"Piper stream closed unexpectedly for input: {text[:80]}"
+            ) from exc
+
+        if resp.is_error:
+            detail = raw.decode("utf-8", errors="replace").strip()
+            message = f"Piper request failed with {resp.status_code}"
+            if detail:
+                message = f"{message}: {detail}"
+            raise httpx.HTTPStatusError(
+                message,
+                request=resp.request,
+                response=resp,
+            )
 
         if len(raw) <= 44:  # WAV header 至少 44 bytes
             logger.warning("Piper returned empty or incomplete WAV for: %s", text[:50])
@@ -80,8 +105,8 @@ class PiperSynthesizer:
             num_channels = wf.getnchannels()
             pcm_data = wf.readframes(wf.getnframes())
 
-        # 切成 20ms frame
-        samples_per_frame = sample_rate * 20 // 1000
+        # 切成較大的 frame，減少 queue 壓力與逐 frame Python 開銷。
+        samples_per_frame = sample_rate * _FRAME_DURATION_MS // 1000
         frame_size = samples_per_frame * num_channels * 2  # 16-bit PCM
 
         for offset in range(0, len(pcm_data), frame_size):

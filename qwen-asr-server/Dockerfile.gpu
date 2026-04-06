@@ -1,8 +1,22 @@
-FROM vllm/vllm-openai:latest
+FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir qwen-asr --ignore-installed blinker
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir \
+    torch==2.7.0 \
+    torchvision==0.22.0 \
+    torchaudio==2.7.0 \
+    --index-url https://download.pytorch.org/whl/cu128
+
+RUN pip install --no-cache-dir \
+    qwen-asr \
+    fastapi \
+    uvicorn \
+    numpy
 
 COPY server.py ./
 

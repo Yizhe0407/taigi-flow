@@ -18,6 +18,10 @@ dependencies = [
     "uvicorn>=0.29",
 ]
 
+[project.scripts]
+taigi-flow = "taigi_flow.main:main"
+taigi-room-token = "taigi_flow.tools.livekit_token:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
