@@ -1,0 +1,119 @@
+services:
+  # === LiveKit Server（自架）===
+  livekit-server:
+    image: livekit/livekit-server:latest
+    command: --dev --bind 0.0.0.0
+    ports:
+      - "7880:7880"   # WebSocket / HTTP
+      - "7881:7881"   # RTC (TCP)
+      - "50000-50100:50000-50100/udp"  # RTC (UDP)
+    environment:
+      - LIVEKIT_KEYS=devkey:devsecret
+
+  # === Ollama LLM ===
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # === Qwen3-ASR Streaming Server（STT）===
+  # 基於 QwenLM/Qwen3-ASR 的 demo_streaming.py，提供 HTTP chunk API
+  # API: POST /api/start  /api/chunk  /api/finish
+  # CPU（開發/Mac 預設）
+  qwen-asr:
+    build:
+      context: ./qwen-asr-server
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./models/qwen3-asr:/model
+    environment:
+      - MODEL_NAME=/model/checkpoint-20340
+      - PORT=8001
+      - DEVICE=cpu
+
+  # GPU（生產部署，需 NVIDIA）
+  qwen-asr-gpu:
+    build:
+      context: ./qwen-asr-server
+      dockerfile: Dockerfile.gpu
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./models/qwen3-asr:/model
+    environment:
+      - MODEL_NAME=/model/checkpoint-20340
+      - PORT=8001
+      - DEVICE=cuda
+    profiles:
+      - production
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # === Piper TTS HTTP Server ===
+  piper-tts:
+    build:
+      context: ./piper-tts-http-server
+    ports:
+      - "5000:5000"
+    volumes:
+      - piper_data:/data
+    environment:
+      - DATA_DIR=/data
+      - PORT=5000
+
+  # === Taigi Agent Worker（生產環境用，開發時直接用 uv 本機跑）===
+  taigi-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env.local
+    depends_on:
+      - livekit-server
+      - qwen-asr
+      - ollama
+      - piper-tts
+    profiles:
+      - production   # 預設不啟動，需明確指定：docker compose --profile production up
+
+  # === Prometheus ===
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+
+  # === Grafana ===
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+
+volumes:
+  ollama_data:
+  piper_data:
+  prometheus_data:
+  grafana_data:

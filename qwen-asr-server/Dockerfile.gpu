@@ -1,0 +1,15 @@
+FROM vllm/vllm-openai:latest
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir qwen-asr --ignore-installed blinker
+
+COPY server.py ./
+
+ENV MODEL_NAME=/model/checkpoint-20340
+ENV PORT=8001
+ENV DEVICE=cuda
+
+EXPOSE 8001
+
+CMD ["python", "server.py"]

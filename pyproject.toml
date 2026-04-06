@@ -1,0 +1,41 @@
+[project]
+name = "taigi-flow"
+version = "0.1.0"
+description = "Real-time Taiwanese (台語) voice conversational AI agent"
+requires-python = ">=3.12"
+dependencies = [
+    "livekit-agents[openai,silero,turn-detector]~=1.5",
+    "pydantic-settings>=2.0",
+    "httpx>=0.27",
+    "msgpack>=1.0",
+    "taibun>=1.1",
+    "websockets>=13.0",
+    "prometheus-client>=0.20",
+    "opentelemetry-api>=1.20",
+    "opentelemetry-sdk>=1.20",
+    "opentelemetry-exporter-otlp>=1.20",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[build-system]
+requires = ["setuptools>=75.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
