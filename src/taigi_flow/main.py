@@ -7,8 +7,9 @@ import logging
 
 # 在所有 livekit import 之前載入 .env.local 到 os.environ
 # livekit-agents 直接讀 LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET
+from pathlib import Path
 from dotenv import load_dotenv
-load_dotenv(".env.local")
+load_dotenv(Path(__file__).resolve().parents[2] / ".env.local")
 
 import uvicorn
 from livekit import agents
