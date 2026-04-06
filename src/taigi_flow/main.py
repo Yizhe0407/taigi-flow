@@ -50,36 +50,34 @@ async def entrypoint(ctx: agents.JobContext) -> None:
         "converter": settings.converter_backend,
     })
 
-    try:
-        session = AgentSession(
-            stt=factory.create_stt(settings),
-            llm=factory.create_llm(settings),
-            tts=None,  # tts_node 完全覆寫，不使用 plugin
-            vad=silero.VAD.load(),
-            turn_handling=TurnHandlingOptions(
-                turn_detection=MultilingualModel(),
-            ),
-        )
+    session = AgentSession(
+        stt=factory.create_stt(settings),
+        llm=factory.create_llm(settings),
+        tts=None,  # tts_node 完全覆寫，不使用 plugin
+        vad=silero.VAD.load(),
+        turn_handling=TurnHandlingOptions(
+            turn_detection=MultilingualModel(),
+        ),
+    )
 
-        agent = TaigiAgent(
-            converter=factory.create_converter(settings),
-            synthesizer=factory.create_synthesizer(settings),
-            instructions=settings.agent_instructions,
-        )
-
-        await session.start(room=ctx.room, agent=agent)
-
-        # 初始招呼
-        await session.generate_reply(
-            instructions="用台語向使用者打招呼，問有什麼需要幫忙的。"
-        )
-
-        await ctx.wait_for_disconnect()
-
-    finally:
+    @session.on("close")
+    def _on_close():
         metrics.sessions_active.dec()
         unregister_session(session_id)
         logger.info("Session ended: %s", session_id)
+
+    agent = TaigiAgent(
+        converter=factory.create_converter(settings),
+        synthesizer=factory.create_synthesizer(settings),
+        instructions=settings.agent_instructions,
+    )
+
+    await session.start(room=ctx.room, agent=agent)
+
+    # 初始招呼
+    await session.generate_reply(
+        instructions="用台語向使用者打招呼，問有什麼需要幫忙的。"
+    )
 
 
 if __name__ == "__main__":

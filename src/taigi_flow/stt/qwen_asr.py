@@ -48,8 +48,8 @@ def _to_float32_mono(frame: stt.AudioFrame) -> bytes:
 class QwenASRStream(stt.RecognizeStream):
     """Qwen3-ASR HTTP chunk 串流辨識。"""
 
-    def __init__(self, base_url: str, conn_options: APIConnectOptions):
-        super().__init__(conn_options=conn_options)
+    def __init__(self, stt: "QwenASRSTT", base_url: str, conn_options: APIConnectOptions):
+        super().__init__(stt=stt, conn_options=conn_options)
         self._base_url = base_url.rstrip("/")
 
     async def _run(self) -> None:
@@ -189,4 +189,4 @@ class QwenASRSTT(stt.STT):
     def stream(
         self, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS
     ) -> QwenASRStream:
-        return QwenASRStream(self._base_url, conn_options)
+        return QwenASRStream(stt=self, base_url=self._base_url, conn_options=conn_options)
