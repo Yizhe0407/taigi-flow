@@ -1,3 +1,6 @@
 [submodule "hanloflow"]
 	path = hanloflow
 	url = https://github.com/Yizhe0407/HanloFlow
+[submodule "piper-tts-http-server"]
+	path = piper-tts-http-server
+	url = https://github.com/Yizhe0407/piper-tts-http-server.git
