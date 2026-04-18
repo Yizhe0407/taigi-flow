@@ -34,41 +34,106 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 
 ## 🚀 快速開始
 
-```bash
-# 1. 複製環境變數範本
-cp .env.example .env
-# 編輯 .env 填入 OPENAI_API_KEY 等
+### 前置需求
 
-# 2. 啟動全部服務
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [pnpm](https://pnpm.io/installation) v10+
+- [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python 套件管理)
+- Node.js 20+
+
+### 步驟（約 30 分鐘）
+
+```bash
+# 1. Clone 專案
+git clone <repo-url>
+cd taigi-flow
+
+# 2. 複製並編輯環境變數
+cp .env.example .env
+# 至少填入：POSTGRES_PASSWORD、LIVEKIT_API_KEY、LIVEKIT_API_SECRET
+# OPENAI_API_KEY 在 Phase 1 前不需要
+
+# 3. 啟動基礎設施（postgres / redis / livekit）
 docker compose up -d
 
-# 3. 執行 DB migration
-pnpm --filter @app/web prisma migrate dev
+# 確認全部 healthy
+docker compose ps
 
-# 4. 訪問
-# Playground: http://localhost:3000
-# Admin:      http://localhost:3000/admin
+# 4. 安裝前端依賴
+cd web && pnpm install && cd ..
+
+# 5. 執行 DB migration + seed
+cd web/packages/db
+DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
+  pnpm exec prisma migrate deploy
+DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
+  pnpm exec prisma db seed
+cd ../../..
+
+# 6. 安裝 Worker 依賴
+cd worker && uv sync --extra dev && cd ..
+
+# 7. 驗證 Worker 能連上 DB
+cd worker
+DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
+  uv run pytest tests/test_db_smoke.py -v
+cd ..
 ```
 
-詳細部署步驟見 [`docs/plan.md §8`](docs/plan.md#8-容器化部署-docker-compose)。
+### 開發伺服器
+
+```bash
+# 前端
+cd web
+pnpm --filter playground dev   # http://localhost:3000
+pnpm --filter admin dev        # http://localhost:3001
+
+# Worker（目前只印 "Worker ready"，Phase 1 後有實際邏輯）
+cd worker
+uv run python -m worker.main
+```
+
+### 服務一覽
+
+| 服務 | URL / 連線 |
+|------|-----------|
+| Playground | http://localhost:3000 |
+| Admin | http://localhost:3001 |
+| LiveKit | ws://localhost:7880 |
+| PostgreSQL | localhost:5432 / DB: `agent_system` |
+| Redis | localhost:6379 |
+
+詳細架構與設計決策見 [`docs/plan.md`](docs/plan.md)。
 
 ## 📁 專案結構
 
 ```
 .
-├── README.md               # 本檔
-├── CLAUDE.md              # AI 開發助手工作規則
+├── .github/workflows/ci.yml   # GitHub Actions CI
+├── docker-compose.yml         # postgres / redis / livekit
+├── infra/livekit.yaml         # LiveKit dev 設定
+├── .env.example               # 環境變數範本
+├── CLAUDE.md                  # AI 開發助手工作規則
 ├── docs/
-│   ├── plan.md           # 完整設計文件
-│   ├── architecture.md   # 純架構圖彙整
-│   ├── asr_evaluation.md # Phase 2 ASR 評估報告
-│   └── adr/              # 架構決策紀錄
-├── tasks/                 # 分階段任務清單
-│   ├── phase-0-infrastructure.md
-│   ├── phase-1-text-pipeline.md
-│   └── ...
-├── web/                   # Next.js Monorepo
-└── worker/                # Agent Worker
+│   ├── plan.md               # 完整設計文件
+│   └── adr/                  # 架構決策紀錄
+├── tasks/                     # 分階段任務清單
+├── web/                       # Next.js Monorepo (pnpm + Turbo)
+│   ├── apps/playground/      # 使用者對話介面 :3000
+│   ├── apps/admin/           # 管理後台 :3001
+│   └── packages/
+│       ├── db/               # Prisma schema + migrations
+│       ├── types/            # 共用 zod schema
+│       ├── ui/               # 共用元件
+│       └── api-client/       # 後端 API 封裝
+└── worker/                    # Agent Worker (Python + uv)
+    ├── worker/
+    │   ├── controller/       # VAD + Barge-in FSM
+    │   ├── pipeline/         # ASR / LLM / Splitter / TTS
+    │   ├── db/               # SQLAlchemy models + repositories
+    │   ├── tools/            # Function calling tools
+    │   └── observability/    # 延遲計時器
+    └── tests/
 ```
 
 ## 🗺️ 開發路線
