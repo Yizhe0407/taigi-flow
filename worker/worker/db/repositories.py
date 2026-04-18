@@ -21,6 +21,15 @@ class AgentProfileRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_active_by_name(self, name: str) -> AgentProfile | None:
+        result = await self._session.execute(
+            select(AgentProfile).where(
+                AgentProfile.name == name,
+                AgentProfile.isActive.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
 
 class InteractionLogRepository:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
