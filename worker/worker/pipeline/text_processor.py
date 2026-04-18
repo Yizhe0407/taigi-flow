@@ -37,7 +37,7 @@ class TextProcessor:
         self._dict_loaded = False
         self._dict_last_updated: datetime | None = None
         self._hanlo = TaigiConverter()
-        self._taibun = Converter(system="Tailo", format="mark")
+        self._taibun = Converter(system="Tailo", format="number")
 
     def _dict_query(self) -> object:
         return select(PronunciationEntry).where(

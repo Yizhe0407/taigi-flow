@@ -72,35 +72,33 @@ async def run(profile_name: str) -> None:
             t_first_tok: float | None = None
 
             print("Assistant >")
-            print("  [LLM]    ", end="", flush=True)
             try:
                 stream = await llm.stream(messages)
                 async for token in stream:
                     if t_first_tok is None:
                         t_first_tok = time.perf_counter()
                     llm_full.append(token)
-                    print(token, end="", flush=True)
                     for chunk in splitter.feed(token):
                         result = text_proc.process(chunk)
                         all_hanlo.append(result.hanlo)
                         all_taibun.append(result.taibun)
-                        print(f"\n  [CHUNK]  「{chunk}」")
-                        print(f"  [HANLO]  {result.hanlo}")
-                        print(f"  [TAIBUN] {result.taibun}")
-                        print("  [LLM]    ", end="", flush=True)
-                print()
+                        print(f"  [原文]   {chunk.strip()}")
+                        print(f"  [漢羅]   {result.hanlo}")
+                        print(f"  [台羅]   {result.taibun}")
+                        print()
 
                 remainder = splitter.flush()
                 if remainder.strip():
                     result = text_proc.process(remainder)
                     all_hanlo.append(result.hanlo)
                     all_taibun.append(result.taibun)
-                    print(f"  [CHUNK]  「{remainder}」")
-                    print(f"  [HANLO]  {result.hanlo}")
-                    print(f"  [TAIBUN] {result.taibun}")
+                    print(f"  [原文]   {remainder.strip()}")
+                    print(f"  [漢羅]   {result.hanlo}")
+                    print(f"  [台羅]   {result.taibun}")
+                    print()
 
             except asyncio.TimeoutError:
-                print("\n[ERROR] LLM timeout")
+                print("[ERROR] LLM timeout")
 
             t_end = time.perf_counter()
             llm_raw = "".join(llm_full)
