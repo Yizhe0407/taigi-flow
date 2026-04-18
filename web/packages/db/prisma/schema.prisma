@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ Agent 人格管理 ============
+model AgentProfile {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  description  String?
+  systemPrompt String   @db.Text
+  voiceConfig  Json
+  ragConfig    Json?
+  tools        Json
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions Session[]
+}
+
+// ============ 單一對話 Session ============
+model Session {
+  id             String       @id @default(uuid())
+  agentProfileId String
+  agentProfile   AgentProfile @relation(fields: [agentProfileId], references: [id])
+  livekitRoom    String
+  startedAt      DateTime     @default(now())
+  endedAt        DateTime?
+
+  logs InteractionLog[]
+
+  @@index([livekitRoom])
+}
+
+// ============ 對話日誌 ============
+model InteractionLog {
+  id        String  @id @default(uuid())
+  sessionId String
+  session   Session @relation(fields: [sessionId], references: [id])
+  turnIndex Int
+
+  userAsrText String  @db.Text
+  llmRawText  String  @db.Text
+  hanloText   String? @db.Text
+  taibunText  String  @db.Text
+
+  latencyAsrEnd      Int?
+  latencyLlmFirstTok Int?
+  latencyFirstAudio  Int?
+  latencyTotal       Int?
+
+  wasBargedIn Boolean @default(false)
+  errorFlag   String?
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, turnIndex])
+}
+
+// ============ 發音字典 ============
+model PronunciationEntry {
+  id          String   @id @default(uuid())
+  profileId   String?
+  term        String
+  replacement String
+  priority    Int      @default(0)
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([profileId, term])
+  @@index([term])
+}
+
+// ============ RAG 向量儲存 ============
+model KnowledgeChunk {
+  id           String                      @id @default(uuid())
+  collectionId String
+  content      String                      @db.Text
+  metadata     Json
+  embedding    Unsupported("vector(1536)")?
+
+  createdAt DateTime @default(now())
+
+  @@index([collectionId])
+}
