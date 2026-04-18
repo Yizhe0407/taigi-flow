@@ -90,6 +90,11 @@ jobs:
       - name: Pyright
         run: uv run pyright
 
+      - name: Generate Prisma client
+        run: |
+          cd ../web/packages/db
+          pnpm exec prisma generate
+
       - name: Run migrations
         env:
           DATABASE_URL: postgresql://admin:devpassword@localhost:5432/agent_system
