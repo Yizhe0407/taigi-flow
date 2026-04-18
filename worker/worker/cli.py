@@ -72,13 +72,14 @@ async def run(profile_name: str) -> None:
             t_first_tok: float | None = None
 
             print("Assistant >")
+            print("  [LLM]    ", end="", flush=True)
             try:
                 stream = await llm.stream(messages)
                 async for token in stream:
                     if t_first_tok is None:
                         t_first_tok = time.perf_counter()
                     llm_full.append(token)
-                    print(f"  [LLM]    {token}", end="", flush=True)
+                    print(token, end="", flush=True)
                     for chunk in splitter.feed(token):
                         result = text_proc.process(chunk)
                         all_hanlo.append(result.hanlo)
@@ -86,6 +87,7 @@ async def run(profile_name: str) -> None:
                         print(f"\n  [CHUNK]  「{chunk}」")
                         print(f"  [HANLO]  {result.hanlo}")
                         print(f"  [TAIBUN] {result.taibun}")
+                        print("  [LLM]    ", end="", flush=True)
                 print()
 
                 remainder = splitter.flush()
