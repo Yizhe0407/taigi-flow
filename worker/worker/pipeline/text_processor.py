@@ -1,9 +1,10 @@
 import re
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from worker.db.models import PronunciationEntry
@@ -34,22 +35,45 @@ class TextProcessor:
         self._db_session = db_session
         self._dictionary: list[PronunciationEntry] = []
         self._dict_loaded = False
+        self._dict_last_updated: datetime | None = None
         self._hanlo = TaigiConverter()
         self._taibun = Converter(system="Tailo", format="mark")
+
+    def _dict_query(self) -> object:
+        return select(PronunciationEntry).where(
+            (PronunciationEntry.profileId == self._profile_id)
+            | (PronunciationEntry.profileId.is_(None))
+        )
 
     async def load_dictionary(self) -> None:
         if self._db_session is None:
             self._dict_loaded = True
             return
-        stmt = select(PronunciationEntry).where(
-            (PronunciationEntry.profileId == self._profile_id)
-            | (PronunciationEntry.profileId.is_(None))
-        )
-        result = await self._db_session.execute(stmt)
+        result = await self._db_session.execute(self._dict_query())
         entries = list(result.scalars().all())
         entries.sort(key=lambda e: (-e.priority, -len(e.term)))
         self._dictionary = entries
+        self._dict_last_updated = max(
+            (e.updatedAt for e in entries), default=None
+        )
         self._dict_loaded = True
+
+    async def reload_if_updated(self, session: AsyncSession) -> None:
+        """Check DB max updatedAt; reload dictionary if newer entries exist."""
+        stmt = select(func.max(PronunciationEntry.updatedAt)).where(
+            (PronunciationEntry.profileId == self._profile_id)
+            | (PronunciationEntry.profileId.is_(None))
+        )
+        result = await session.execute(stmt)
+        db_max: datetime | None = result.scalar_one_or_none()
+        if db_max is None:
+            return
+        if self._dict_last_updated is None or db_max > self._dict_last_updated:
+            result2 = await session.execute(self._dict_query())
+            entries = list(result2.scalars().all())
+            entries.sort(key=lambda e: (-e.priority, -len(e.term)))
+            self._dictionary = entries
+            self._dict_last_updated = db_max
 
     def process(self, zh_text: str) -> ProcessResult:
         if not zh_text:

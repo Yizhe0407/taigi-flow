@@ -57,6 +57,9 @@ async def run(profile_name: str) -> None:
             if not user_input:
                 continue
 
+            async with AsyncSessionFactory() as db:
+                await text_proc.reload_if_updated(db)
+
             memory.add("user", user_input)
             messages = memory.to_messages()
 
