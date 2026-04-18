@@ -31,7 +31,9 @@ class AgentProfile(Base):
         nullable=False,
     )
 
-    sessions: Mapped[list["Session"]] = relationship("Session", back_populates="agentProfile")
+    sessions: Mapped[list["Session"]] = relationship(
+        "Session", back_populates="agentProfile"
+    )
 
 
 class Session(Base):
@@ -45,9 +47,13 @@ class Session(Base):
     startedAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    endedAt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    endedAt: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
-    agentProfile: Mapped[AgentProfile] = relationship("AgentProfile", back_populates="sessions")
+    agentProfile: Mapped[AgentProfile] = relationship(
+        "AgentProfile", back_populates="sessions"
+    )
     logs: Mapped[list["InteractionLog"]] = relationship(
         "InteractionLog", back_populates="session"
     )
