@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  web:
+    name: Web (lint / typecheck / build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+  worker:
+    name: Worker (ruff / pyright / pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+
+    services:
+      postgres:
+        image: ankane/pgvector:latest
+        env:
+          POSTGRES_DB: agent_system
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: devpassword
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U admin -d agent_system"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: latest
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Pyright
+        run: uv run pyright
+
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://admin:devpassword@localhost:5432/agent_system
+        run: |
+          cd ../web/packages/db
+          npx prisma migrate deploy
+
+      - name: Seed database
+        env:
+          DATABASE_URL: postgresql://admin:devpassword@localhost:5432/agent_system
+        run: |
+          cd ../web/packages/db
+          npx ts-node prisma/seed.ts
+
+      - name: Pytest
+        env:
+          DATABASE_URL: postgresql://admin:devpassword@localhost:5432/agent_system
+        run: uv run pytest
+
+  prisma:
+    name: Prisma schema format check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/packages/db
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: cd ../.. && pnpm install --frozen-lockfile
+
+      - name: Prisma format check
+        run: pnpm exec prisma format --check

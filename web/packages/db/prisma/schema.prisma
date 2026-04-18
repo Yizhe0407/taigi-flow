@@ -79,9 +79,9 @@ model PronunciationEntry {
 
 // ============ RAG 向量儲存 ============
 model KnowledgeChunk {
-  id           String                      @id @default(uuid())
+  id           String                       @id @default(uuid())
   collectionId String
-  content      String                      @db.Text
+  content      String                       @db.Text
   metadata     Json
   embedding    Unsupported("vector(1536)")?
 
