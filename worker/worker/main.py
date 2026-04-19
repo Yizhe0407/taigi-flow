@@ -54,9 +54,9 @@ async def entrypoint(ctx: JobContext) -> None:
         logger.error(f"ASR warmup failed: {e}")
 
     llm = LLMClient(
-        base_url=os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
-        api_key=os.getenv("OPENAI_API_KEY", ""),
-        model="gpt-4o-mini",
+        base_url=os.getenv("OPENAI_BASE_URL", "http://100.107.45.116:11434/v1"),
+        api_key=os.getenv("OPENAI_API_KEY", "ollama"),
+        model=os.getenv("LLM_MODEL", "frob/qwen3.5-instruct:9b"),
     )
     memory = SlidingWindowMemory(
         system_prompt="你是一個會講台語的 AI 助理。請用繁體中文（漢羅混寫）回答。"

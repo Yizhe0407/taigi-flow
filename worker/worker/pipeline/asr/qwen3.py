@@ -1,49 +1,70 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
+import io
+import os
+import wave
 from collections.abc import AsyncIterator
-from typing import Any
+
+import aiohttp
 
 from .base import ASRPartial, BaseASR
 
-try:
-    from vllm import AsyncEngineArgs, AsyncLLMEngine  # type: ignore
-except ImportError:
-    AsyncEngineArgs = Any  # type: ignore
-    AsyncLLMEngine = Any  # type: ignore
-
 
 class Qwen3ASR(BaseASR):
-    def __init__(self, model_path: str = "Qwen/Qwen3-ASR-0.6B") -> None:
-        self.model_path = model_path
-        self.engine_args = AsyncEngineArgs(  # type: ignore
-            model=model_path,
-            dtype="bfloat16",
-            enforce_eager=False,  # 啟用 CUDA Graph 降低 TTFT
+    def __init__(self) -> None:
+        self._api_url = os.getenv(
+            "ASR_URL", "http://localhost:8000/v1/audio/transcriptions"
         )
-        self.engine: AsyncLLMEngine | None = None  # type: ignore
 
     async def warmup(self) -> None:
-        if self.engine is None:
-            self.engine = AsyncLLMEngine.from_engine_args(self.engine_args)  # type: ignore
-        await self._dummy_inference()
-
-    async def _dummy_inference(self) -> None:
-        # Dummy audio infer to trigger kernel compilation
         pass
 
     async def stream(
         self, audio_chunks: AsyncIterator[bytes]
     ) -> AsyncIterator[ASRPartial]:
-        if self.engine is None:
-            raise RuntimeError("Engine not initialized. Call warmup() first.")
+        # Since the provided API endpoint (v1/audio/transcriptions) expects a file,
+        # it is a batch endpoint. We accumulate the chunks and send them.
+        buffer = bytearray()
+        async for chunk in audio_chunks:
+            buffer.extend(chunk)
 
-        # Qwen3-ASR 原生串流：累積 chunk 到 min_chunk_ms 後送入
-        async for partial in self.engine.transcribe_stream(audio_chunks):  # type: ignore
-            yield ASRPartial(
-                text=partial.text,  # type: ignore
-                is_final=partial.is_final,  # type: ignore
-                confidence=partial.logprob,  # type: ignore
-            )
+        # Convert raw 16kHz PCM to WAV format in memory
+        wav_io = io.BytesIO()
+        with wave.open(wav_io, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(16000)
+            wav_file.writeframes(bytes(buffer))
+        
+        wav_data = wav_io.getvalue()
+
+        form_data = aiohttp.FormData()
+        form_data.add_field(
+            "file",
+            wav_data,
+            filename="audio.wav",
+            content_type="audio/wav",
+        )
+        form_data.add_field("language", "auto")
+        form_data.add_field("max_gap_sec", "0.6")
+        form_data.add_field("return_timestamps", "true")
+
+        try:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(self._api_url, data=form_data) as response,
+            ):
+                if response.status == 200:
+                    result = await response.json()
+                    text = result.get("text", "")
+                    yield ASRPartial(text=text, is_final=True)
+                else:
+                    err_text = await response.text()
+                    raise RuntimeError(
+                        f"ASR API error: {response.status} {err_text}"
+                    )
+        except Exception as e:
+            raise RuntimeError(f"Failed to call ASR API: {e}") from e
 
     @property
     def name(self) -> str:
-        return "qwen3-asr-0.6b"
+        return "qwen3-asr-0.6b (API)"

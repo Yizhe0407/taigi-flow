@@ -1,38 +1,23 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
-import asyncio
+import io
+import os
+import wave
 from collections.abc import AsyncIterator
-from typing import Any
+
+import aiohttp
 
 from .base import ASRPartial, BaseASR
 
-try:
-    import torch  # type: ignore
-    from transformers import (  # type: ignore
-        WhisperForConditionalGeneration,
-        WhisperProcessor,
-    )
-except ImportError:
-    torch = Any  # type: ignore
-    WhisperProcessor = Any  # type: ignore
-    WhisperForConditionalGeneration = Any  # type: ignore
-
 
 class BreezeASR26(BaseASR):
-    def __init__(self, model_path: str = "MediaTek-Research/Breeze-ASR-26") -> None:
-        self.processor: Any = None
-        self.model: Any = None
-        self.model_path = model_path
+    def __init__(self) -> None:
+        self._api_url = os.getenv(
+            "ASR_URL", "http://localhost:8000/v1/audio/transcriptions"
+        )
 
     async def warmup(self) -> None:
-        def _load() -> None:
-            self.processor = WhisperProcessor.from_pretrained(self.model_path)  # type: ignore
-            device = "cuda" if torch.cuda.is_available() else "cpu"  # type: ignore
-            self.model = WhisperForConditionalGeneration.from_pretrained(  # type: ignore
-                self.model_path,
-                torch_dtype=torch.float16 if device == "cuda" else torch.float32,  # type: ignore
-            ).to(device).eval()  # type: ignore
-
-        await asyncio.to_thread(_load)
+        # No local warmup needed, it's an API call
+        pass
 
     async def stream(
         self, audio_chunks: AsyncIterator[bytes]
@@ -45,33 +30,41 @@ class BreezeASR26(BaseASR):
         yield ASRPartial(text=text, is_final=True)
 
     async def _transcribe_full(self, audio_bytes: bytes) -> str:
-        if self.model is None or self.processor is None:
-            raise RuntimeError("Model not loaded. Call warmup() first.")
+        # Convert raw 16kHz PCM to WAV format in memory
+        wav_io = io.BytesIO()
+        with wave.open(wav_io, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(16000)
+            wav_file.writeframes(audio_bytes)
+        
+        wav_data = wav_io.getvalue()
 
-        # Convert bytes to numpy array for processor
-        def _process() -> str:
-            import numpy as np
+        form_data = aiohttp.FormData()
+        form_data.add_field(
+            "file",
+            wav_data,
+            filename="audio.wav",
+            content_type="audio/wav",
+        )
+        form_data.add_field("language", "auto")
+        form_data.add_field("max_gap_sec", "0.6")
+        form_data.add_field("return_timestamps", "true")
 
-            # Assuming 16kHz mono PCM 16-bit
-            audio_array = (
-                np.frombuffer(audio_bytes, dtype=np.int16).astype(np.float32) / 32768.0
-            )
-
-            inputs = self.processor(
-                audio_array, sampling_rate=16000, return_tensors="pt"
-            )  # type: ignore
-            inputs = inputs.to(self.model.device)  # type: ignore
-
-            with torch.no_grad():  # type: ignore
-                predicted_ids = self.model.generate(**inputs)  # type: ignore
-
-            transcription: str = self.processor.batch_decode(
-                predicted_ids, skip_special_tokens=True
-            )[0]  # type: ignore
-            return transcription
-
-        return await asyncio.to_thread(_process)
+        try:
+            async with (
+                aiohttp.ClientSession() as session,
+                session.post(self._api_url, data=form_data) as response,
+            ):
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get("text", "")
+                else:
+                    text = await response.text()
+                    raise RuntimeError(f"ASR API error: {response.status} {text}")
+        except Exception as e:
+            raise RuntimeError(f"Failed to call ASR API: {e}") from e
 
     @property
     def name(self) -> str:
-        return "breeze-asr-26"
+        return "breeze-asr-26 (API)"
