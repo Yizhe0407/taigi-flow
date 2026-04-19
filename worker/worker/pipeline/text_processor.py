@@ -31,6 +31,16 @@ _TAIBUN_PATCHES: dict[str, str] = {
     "喔": "oh",
     "欸": "eh",
     "唷": "ioh",
+    "嬤": "má",
+    "們": "mûn",
+    "们": "mûn",
+    "佢": "i",
+    "哦": "oh",
+    "呀": "ah",
+    "嘅": "ê",
+    "儂": "lâng",
+    "怹": "in",
+    "儕": "tsê",
 }
 for _ch, _rom in _TAIBUN_PATCHES.items():
     _taibun_module.word_dict.setdefault(_ch, _rom)
