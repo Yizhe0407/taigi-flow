@@ -26,11 +26,11 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 ## 📦 技術棧
 
 - **語音**：LiveKit (WebRTC)、Silero VAD、Qwen3-ASR、Piper TTS
-- **文字處理**：HanloFlow、Taibun
-- **後端**：Python 3.11、FastAPI、`uv`
+- **文字處理**：[HanloFlow](https://github.com/Yizhe0407/HanloFlow)、[Taibun](https://github.com/andreihar/taibun)
+- **後端**：Python 3.12、`uv`
 - **前端**：Next.js (Monorepo)、pnpm、shadcn/ui
 - **資料**：PostgreSQL + pgvector、Prisma ORM
-- **部署**：Docker Compose、Caddy
+- **部署**：Docker Compose
 
 ## 🚀 快速開始
 
@@ -40,8 +40,9 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 - [pnpm](https://pnpm.io/installation) v10+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python 套件管理)
 - Node.js 20+
+- Python 3.12+
 
-### 步驟（約 30 分鐘）
+### 步驟
 
 ```bash
 # 1. Clone 專案
@@ -50,14 +51,11 @@ cd taigi-flow
 
 # 2. 複製並編輯環境變數
 cp .env.example .env
-# 至少填入：POSTGRES_PASSWORD、LIVEKIT_API_KEY、LIVEKIT_API_SECRET
-# OPENAI_API_KEY 在 Phase 1 前不需要
+# 填入：POSTGRES_PASSWORD、LIVEKIT_API_KEY、LIVEKIT_API_SECRET
 
-# 3. 啟動基礎設施（postgres / redis / livekit）
+# 3. 啟動基礎設施（postgres / redis / livekit / cloudbeaver）
 docker compose up -d
-
-# 確認全部 healthy
-docker compose ps
+docker compose ps   # 確認全部 healthy
 
 # 4. 安裝前端依賴
 cd web && pnpm install && cd ..
@@ -70,55 +68,89 @@ DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system
   pnpm exec prisma db seed
 cd ../../..
 
-# 6. 安裝 Worker 依賴
-cd worker && uv sync --extra dev && cd ..
+# 6. 安裝 Worker 依賴（含 HanloFlow）
+cd worker
+uv sync --dev
+cd ..
 
 # 7. 驗證 Worker 能連上 DB
 cd worker
 DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
-  uv run pytest tests/test_db_smoke.py -v
+  uv run pytest tests/ -v
 cd ..
-```
-
-### 開發伺服器
-
-```bash
-# 前端
-cd web
-pnpm --filter playground dev   # http://localhost:3000
-pnpm --filter admin dev        # http://localhost:3001
-
-# Worker（目前只印 "Worker ready"，Phase 1 後有實際邏輯）
-cd worker
-uv run python -m worker.main
 ```
 
 ### 服務一覽
 
-| 服務 | URL / 連線 |
-|------|-----------|
+| 服務 | URL |
+|------|-----|
 | Playground | http://localhost:3000 |
 | Admin | http://localhost:3001 |
 | LiveKit | ws://localhost:7880 |
 | PostgreSQL | localhost:5432 / DB: `agent_system` |
 | Redis | localhost:6379 |
+| Cloudbeaver（DB UI）| http://localhost:8978 |
 
-詳細架構與設計決策見 [`docs/plan.md`](docs/plan.md)。
+**Cloudbeaver 初次設定**：進入 http://localhost:8978 後連線設定填：
+- Host: `postgres`、Port: `5432`、DB: `agent_system`
+- User: `admin`、Password: 你的 `POSTGRES_PASSWORD`
+
+## 💬 文字對話 CLI（Phase 1）
+
+不需語音，直接用文字跟 Agent 對話，驗證文字轉換鏈：
+
+```bash
+cd worker
+DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
+  uv run python -m worker.cli --profile "公車站長"
+```
+
+輸出格式：
+
+```
+You > 請問 307 公車到站時間？
+Assistant >
+  [原文]   根據最新資料，307 公車大約 5 分鐘後到站。
+  [漢羅]   根據最新資料，307 公車大約 5 分鐘後到站矣。
+  [台羅]   King-ku tsue3-sin tsu1-liau7, sam1-khong3-tshit4 kong1-tshia1 tua7-ioh4 go7 hun1-tsing1 au7 kau3-tsam7--ah0.
+
+[Latency] ASR end N/A | LLM first tok 342ms | Total 1203ms
+```
+
+- `Ctrl+C` 優雅退出
+- 每輪對話自動寫入 DB，可在 Cloudbeaver 查看
+
+## 🔧 LLM 設定
+
+Worker 預設使用 Ollama（OpenAI-compatible API）：
+
+| 環境變數 | 預設值 |
+|---------|--------|
+| `LLM_BASE_URL` | `http://100.107.45.116:11434/v1` |
+| `LLM_MODEL` | `frob/qwen3.5-instruct:4b` |
+| `LLM_API_KEY` | `ollama` |
+
+可在 `.env` 中覆寫，或在執行指令前設定：
+
+```bash
+LLM_BASE_URL="http://localhost:11434/v1" \
+LLM_MODEL="llama3.2" \
+  uv run python -m worker.cli --profile "公車站長"
+```
 
 ## 📁 專案結構
 
 ```
 .
-├── .github/workflows/ci.yml   # GitHub Actions CI
-├── docker-compose.yml         # postgres / redis / livekit
-├── infra/livekit.yaml         # LiveKit dev 設定
+├── docker-compose.yml         # postgres / redis / livekit / cloudbeaver
 ├── .env.example               # 環境變數範本
 ├── CLAUDE.md                  # AI 開發助手工作規則
 ├── docs/
 │   ├── plan.md               # 完整設計文件
-│   └── adr/                  # 架構決策紀錄
+│   ├── adr/                  # 架構決策紀錄
+│   └── phase-1-report.md     # Phase 1 完成報告
 ├── tasks/                     # 分階段任務清單
-├── web/                       # Next.js Monorepo (pnpm + Turbo)
+├── web/                       # Next.js Monorepo (pnpm)
 │   ├── apps/playground/      # 使用者對話介面 :3000
 │   ├── apps/admin/           # 管理後台 :3001
 │   └── packages/
@@ -128,33 +160,30 @@ uv run python -m worker.main
 │       └── api-client/       # 後端 API 封裝
 └── worker/                    # Agent Worker (Python + uv)
     ├── worker/
-    │   ├── controller/       # VAD + Barge-in FSM
-    │   ├── pipeline/         # ASR / LLM / Splitter / TTS
+    │   ├── pipeline/         # memory / splitter / llm / text_processor
     │   ├── db/               # SQLAlchemy models + repositories
-    │   ├── tools/            # Function calling tools
+    │   ├── controller/       # VAD + Barge-in FSM（Phase 4）
+    │   ├── tools/            # Function calling tools（Phase 6）
     │   └── observability/    # 延遲計時器
-    └── tests/
+    ├── tests/
+    └── cli.py                # 文字對話測試工具
 ```
 
 ## 🗺️ 開發路線
 
-| Phase | 主題 | 週 |
-|-------|------|----|
-| 0 | 基礎設施 | W1 |
-| 1 | 純文字對話鏈 | W2 |
-| 2 | 語音層接入 + ASR A/B 評估 | W3 |
-| 3 | 完整迴圈整合 | W4 |
-| 4 | Barge-in + AEC | W5 |
-| 5 | 管理後台 | W6 |
-| 6 | RAG + Tools | W7 |
-| 7 | 打磨與文件 | W8 |
+| Phase | 主題 | 狀態 |
+|-------|------|------|
+| 0 | 基礎設施 | ✅ 完成 |
+| 1 | 純文字對話鏈（CLI）| ✅ 完成 |
+| 2 | 語音層接入 + ASR A/B 評估 | 🔲 |
+| 3 | 完整迴圈整合 | 🔲 |
+| 4 | Barge-in + AEC | 🔲 |
+| 5 | 管理後台 | 🔲 |
+| 6 | RAG + Tools | 🔲 |
+| 7 | 打磨與文件 | 🔲 |
 
 完整細節見 [`docs/plan.md §9`](docs/plan.md#9-分階段實作路線) 與 [`tasks/`](tasks/)。
 
 ## 📜 授權
 
 [待定]
-
-## 👥 團隊
-
-[待填]
