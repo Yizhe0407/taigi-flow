@@ -120,6 +120,31 @@ Assistant >
 - `Ctrl+C` 優雅退出
 - 每輪對話自動寫入 DB，可在 Cloudbeaver 查看
 
+## 🔄 更新 HanloFlow
+
+taigi-flow 的 worker 透過 local path 引用 HanloFlow（`../../HanloFlow`）。
+
+**本機開發（editable）**：HanloFlow 改完 `.py` 直接生效，不需任何指令。若尚未設定 editable：
+
+```bash
+cd worker
+uv add --editable "../../HanloFlow"
+```
+
+**切換為 GitHub git URL**（HanloFlow push 後）：
+
+```bash
+cd worker
+uv add "taigi-converter @ git+https://github.com/Yizhe0407/HanloFlow.git"
+```
+
+之後每次 HanloFlow 有新 commit：
+
+```bash
+cd worker
+uv sync --upgrade-package taigi-converter
+```
+
 ## 🔧 LLM 設定
 
 Worker 預設使用 Ollama（OpenAI-compatible API）：
