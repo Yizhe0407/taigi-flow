@@ -14,7 +14,30 @@ if str(_HANLOFLOW_DIR) not in sys.path:
     sys.path.insert(0, str(_HANLOFLOW_DIR))
 
 from converter import TaigiConverter  # type: ignore[import-untyped]  # noqa: E402
+import taibun.taibun as _taibun_module  # noqa: E402
 from taibun import Converter  # noqa: E402
+
+# Patch chars missing from taibun.
+# word_dict (words.msgpack) = char → romanization str; checked by WordDict.__contains__
+# prons_dict (prons.msgpack) = char → list[str]; used for variant lookups
+# Both must be patched before any Converter is created.
+_TAIBUN_PATCHES: dict[str, str] = {
+    "妳": "lí",
+    "您": "lín",
+    "她": "i",
+    "嗎": "ma",
+    "嘸": "bô",
+    "呣": "m̄",
+    "咧": "leh",
+    "囉": "lô",
+    "啦": "la",
+    "喔": "oh",
+    "欸": "eh",
+    "唷": "ioh",
+}
+for _ch, _rom in _TAIBUN_PATCHES.items():
+    _taibun_module.word_dict.setdefault(_ch, _rom)
+    _taibun_module.prons_dict.setdefault(_ch, [_rom])
 
 _PROTECTED = re.compile(r"⟨([^⟩]*)⟩")
 
