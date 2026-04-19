@@ -860,6 +860,20 @@ wheels = [
 ]
 
 [[package]]
+name = "livekit-plugins-silero"
+version = "1.5.4"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "livekit-agents" },
+    { name = "numpy" },
+    { name = "onnxruntime" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e3/0f/a6bbe128b38c99c289b79e7fa8e011bcf6346a0e7e2e7dd32398043f6b81/livekit_plugins_silero-1.5.4.tar.gz", hash = "sha256:a0417ccec1792b826cb91f5fd99eb76bdeb457f0401bec578ead7affde51d845", size = 1955608, upload-time = "2026-04-16T04:52:32.1Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5f/a0/53e03fe0f44d0a95eb1ef06f3b1fabb7202b3b589ac0c0eb6f3567318e84/livekit_plugins_silero-1.5.4-py3-none-any.whl", hash = "sha256:3766d8e03f232045b0f617bd22da4ac455f432cc9be0ce4b883db69f703c0cb7", size = 3903690, upload-time = "2026-04-16T04:52:30.336Z" },
+]
+
+[[package]]
 name = "livekit-protocol"
 version = "1.1.5"
 source = { registry = "https://pypi.org/simple" }
@@ -2051,6 +2065,7 @@ source = { editable = "." }
 dependencies = [
     { name = "asyncpg" },
     { name = "livekit-agents" },
+    { name = "livekit-plugins-silero" },
     { name = "openai" },
     { name = "piper-tts" },
     { name = "pydantic" },
@@ -2081,6 +2096,7 @@ dev = [
 requires-dist = [
     { name = "asyncpg", specifier = ">=0.29.0" },
     { name = "livekit-agents", specifier = ">=0.8.0" },
+    { name = "livekit-plugins-silero", specifier = ">=1.5.4" },
     { name = "openai", specifier = ">=2.32.0" },
     { name = "piper-tts", specifier = ">=1.4.2" },
     { name = "pydantic", specifier = ">=2.0.0" },

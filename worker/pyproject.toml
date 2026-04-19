@@ -15,6 +15,7 @@ dependencies = [
     "taibun>=1.1.7",
     "taigi-converter",
     "piper-tts>=1.4.2",
+    "livekit-plugins-silero>=1.5.4",
 ]
 
 [project.optional-dependencies]
