@@ -50,7 +50,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 
 [tool.uv.sources]
-taigi-converter = { git = "https://github.com/Yizhe0407/HanloFlow.git" }
+taigi-converter = { path = "../../HanloFlow" }
 
 [dependency-groups]
 dev = [

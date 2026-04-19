@@ -1803,10 +1803,13 @@ wheels = [
 [[package]]
 name = "taigi-converter"
 version = "0.1.0"
-source = { git = "https://github.com/Yizhe0407/HanloFlow.git#9e6f7951c038b362cee4ebda76c5229d78c9c09b" }
+source = { directory = "../../HanloFlow" }
 dependencies = [
     { name = "msgpack" },
 ]
+
+[package.metadata]
+requires-dist = [{ name = "msgpack", specifier = ">=1.1.2" }]
 
 [[package]]
 name = "tqdm"
@@ -2002,7 +2005,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.0" },
     { name = "taibun", specifier = ">=1.1.7" },
-    { name = "taigi-converter", git = "https://github.com/Yizhe0407/HanloFlow.git" },
+    { name = "taigi-converter", directory = "../../HanloFlow" },
 ]
 provides-extras = ["dev"]
 

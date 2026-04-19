@@ -1,21 +1,14 @@
 import re
-import sys
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
 
+import taibun.taibun as _taibun_module
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from taibun import Converter
+from taigi_converter import TaigiConverter
 
 from worker.db.models import PronunciationEntry
-
-_HANLOFLOW_DIR = Path(__file__).resolve().parents[2] / "vendor" / "hanloflow"
-if str(_HANLOFLOW_DIR) not in sys.path:
-    sys.path.insert(0, str(_HANLOFLOW_DIR))
-
-from converter import TaigiConverter  # type: ignore[import-untyped]  # noqa: E402
-import taibun.taibun as _taibun_module  # noqa: E402
-from taibun import Converter  # noqa: E402
 
 # Patch chars missing from taibun.
 # word_dict (words.msgpack) = char → romanization str; checked by WordDict.__contains__
