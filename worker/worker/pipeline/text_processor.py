@@ -1,14 +1,20 @@
+from __future__ import annotations
+
 import re
 from dataclasses import dataclass
-from datetime import datetime
+from typing import TYPE_CHECKING
 
 import taibun.taibun as _taibun_module
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from taibun import Converter
 from taigi_converter import TaigiConverter
 
 from worker.db.models import PronunciationEntry
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 # Patch chars missing from taibun.
 # word_dict (words.msgpack) = char → romanization str; checked by WordDict.__contains__

@@ -9,7 +9,9 @@ from worker.db.models import AgentProfile, InteractionLog, Session
 from worker.db.repositories import InteractionLogRepository
 
 _DB_URL = os.environ.get("DATABASE_URL", "")
-_ASYNC_URL = _DB_URL.replace("postgresql://", "postgresql+asyncpg://") if _DB_URL else ""
+_ASYNC_URL = (
+    _DB_URL.replace("postgresql://", "postgresql+asyncpg://") if _DB_URL else ""
+)
 
 pytestmark = pytest.mark.skipif(
     not _DB_URL, reason="DATABASE_URL not set — skipping DB integration tests"

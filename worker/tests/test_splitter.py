@@ -1,5 +1,3 @@
-import pytest
-
 from worker.pipeline.splitter import SmartSplitter
 
 
@@ -30,7 +28,7 @@ def test_multi_token_accumulation() -> None:
         sentences.extend(s.feed(tok))
     rest = s.flush()
     all_text = "".join(sentences) + rest
-    assert "你好，我是Claude。" == all_text
+    assert all_text == "你好，我是Claude。"
     assert len(sentences) >= 1
 
 

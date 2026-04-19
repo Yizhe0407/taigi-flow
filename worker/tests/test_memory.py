@@ -1,5 +1,3 @@
-import pytest
-
 from worker.pipeline.memory import SlidingWindowMemory
 
 

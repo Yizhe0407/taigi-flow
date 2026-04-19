@@ -9,14 +9,14 @@ import time
 
 from dotenv import load_dotenv
 
-load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
-
 from worker.db.repositories import AgentProfileRepository, InteractionLogRepository
 from worker.db.session import AsyncSessionFactory
 from worker.pipeline.llm import LLMClient
 from worker.pipeline.memory import SlidingWindowMemory
 from worker.pipeline.splitter import SmartSplitter
 from worker.pipeline.text_processor import TextProcessor
+
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
 
 
 def _make_llm() -> LLMClient:
@@ -97,7 +97,7 @@ async def run(profile_name: str) -> None:
                     print(f"  [台羅]   {result.taibun}")
                     print()
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 print("[ERROR] LLM timeout")
 
             t_end = time.perf_counter()
@@ -107,7 +107,8 @@ async def run(profile_name: str) -> None:
             first_tok_ms = int((t_first_tok - t_start) * 1000) if t_first_tok else None
             total_ms = int((t_end - t_start) * 1000)
             print(
-                f"[Latency] ASR end N/A | LLM first tok {first_tok_ms}ms | Total {total_ms}ms\n"
+                "[Latency] ASR end N/A | "
+                f"LLM first tok {first_tok_ms}ms | Total {total_ms}ms\n"
             )
 
             await log_repo.log_turn(

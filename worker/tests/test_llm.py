@@ -84,7 +84,10 @@ async def test_empty_content_chunks_filtered(httpserver: HTTPServer) -> None:
         {"choices": [{"delta": {"content": "hi"}, "finish_reason": None}]},
         {"choices": [{"delta": {}, "finish_reason": "stop"}]},
     ]
-    body = "".join(f"data: {json.dumps(c)}\n\n" for c in raw_chunks) + "data: [DONE]\n\n"
+    body = (
+        "".join(f"data: {json.dumps(c)}\n\n" for c in raw_chunks)
+        + "data: [DONE]\n\n"
+    )
     httpserver.expect_request("/v1/chat/completions").respond_with_data(
         body, content_type="text/event-stream"
     )
