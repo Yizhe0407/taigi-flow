@@ -25,7 +25,7 @@ def _make_llm() -> LLMClient:
             "LLM_BASE_URL", "http://100.107.45.116:11434/v1"
         ),
         api_key=os.environ.get("LLM_API_KEY", "ollama"),
-        model=os.environ.get("LLM_MODEL", "frob/qwen3.5-instruct:4b"),
+        model=os.environ.get("LLM_MODEL", "frob/qwen3.5-instruct:9b"),
     )
 
 
