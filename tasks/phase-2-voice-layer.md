@@ -24,79 +24,79 @@
 
 ### P2-01：Piper TTS 包裝
 
-- [ ] **檔案**：`worker/pipeline/tts.py`
-- [ ] **介面**：
+- [x] **檔案**：`worker/pipeline/tts.py`
+- [x] **介面**：
   ```python
   class PiperTTS:
       def __init__(self, model_path: str, speaker_id: int | None = None) -> None: ...
       async def synthesize(self, taibun_text: str) -> AsyncIterator[bytes]: ...
       def clear_queue(self) -> None: ...  # barge-in 用
   ```
-- [ ] **驗收**：能輸入台羅字產出 16kHz mono PCM，用 `aplay` 播放正常
-- [ ] **Commit**：`feat(worker): wrap piper tts with async interface`
+- [x] **驗收**：能輸入台羅字產出 16kHz mono PCM，用 `aplay` 播放正常
+- [x] **Commit**：`feat(worker): wrap piper tts with async interface` (03159ae)
 
 ### P2-02：Silero VAD 整合
 
-- [ ] **檔案**：`worker/controller/vad.py`
-- [ ] **驗收**：餵音訊 chunk 能正確回報 speech start / end 事件
-- [ ] **Commit**：`feat(worker): integrate silero vad`
+- [x] **檔案**：`worker/controller/vad.py`
+- [x] **驗收**：餵音訊 chunk 能正確回報 speech start / end 事件
+- [x] **Commit**：`feat(worker): integrate silero vad` (f171ffb)
 
 ### P2-03：ASR 抽象介面
 
-- [ ] **檔案**：`worker/pipeline/asr/base.py`
-- [ ] **參照**：`docs/plan.md §4.2.2`
-- [ ] **驗收**：介面定義清楚，pyright 通過
-- [ ] **Commit**：`feat(worker): add base asr interface`
+- [x] **檔案**：`worker/pipeline/asr/base.py`
+- [x] **參照**：`docs/plan.md §4.2.2`
+- [x] **驗收**：介面定義清楚，pyright 通過
+- [x] **Commit**：`feat(worker): add base asr interface` (2e2547c)
 
 ### P2-04：Qwen3-ASR 實作
 
-- [ ] **檔案**：`worker/pipeline/asr/qwen3.py`
-- [ ] **參照**：`docs/plan.md §4.2.3`
-- [ ] **預設**：使用 0.6B 版本
-- [ ] **驗收**：能串流辨識 16kHz PCM，TTFT 可量測
-- [ ] **Commit**：`feat(worker): implement qwen3-asr backend`
+- [x] **檔案**：`worker/pipeline/asr/qwen3.py`
+- [x] **參照**：`docs/plan.md §4.2.3`
+- [x] **預設**：使用 0.6B 版本
+- [x] **驗收**：能串流辨識 16kHz PCM，TTFT 可量測
+- [x] **Commit**：`feat(worker): implement qwen3-asr backend` (aea135c)
 
 ### P2-05：Breeze-ASR-26 實作
 
-- [ ] **檔案**：`worker/pipeline/asr/breeze.py`
-- [ ] **參照**：`docs/plan.md §4.2.4`
-- [ ] **注意**：Breeze-26 無原生串流，配合 VAD endpoint 驅動
-- [ ] **驗收**：給一段完整音訊能回傳辨識結果
-- [ ] **Commit**：`feat(worker): implement breeze-asr-26 backend`
+- [x] **檔案**：`worker/pipeline/asr/breeze.py`
+- [x] **參照**：`docs/plan.md §4.2.4`
+- [x] **注意**：Breeze-26 無原生串流，配合 VAD endpoint 驅動
+- [x] **驗收**：給一段完整音訊能回傳辨識結果
+- [x] **Commit**：`feat(worker): implement breeze-asr-26 backend` (6c5edfb)
 
 ### P2-06：LiveKit Agent 入口
 
-- [ ] **檔案**：`worker/main.py`（擴充）
-- [ ] **功能**：使用 `livekit-agents` SDK，能加入 Room、訂閱使用者音訊、發佈 Agent 音訊
-- [ ] **驗收**：能以 livekit-cli 連進 Room，看到 agent-worker 的軌道
-- [ ] **Commit**：`feat(worker): add livekit agent entry point`
+- [x] **檔案**：`worker/main.py`（擴充）
+- [x] **功能**：使用 `livekit-agents` SDK，能加入 Room、訂閱使用者音訊、發佈 Agent 音訊
+- [x] **驗收**：能以 livekit-cli 連進 Room，看到 agent-worker 的軌道
+- [x] **Commit**：`feat(worker): add livekit agent entry point` (9b75623)
 
 ### P2-07：Dummy Loop 驗證
 
-- [ ] **依賴**：P2-01、P2-02、P2-06
-- [ ] **內容**：麥克風 → VAD 觸發 → 寫死「你好，我是 Agent」→ Piper TTS → 播放
-- [ ] **不接**：ASR、LLM
-- [ ] **驗收**：能完整跑通，延遲 < 1.5s
-- [ ] **Commit**：`feat(worker): dummy loop for voice layer verification`
+- [x] **依賴**：P2-01、P2-02、P2-06
+- [x] **內容**：麥克風 → VAD 觸發 → 寫死「你好，我是 Agent」→ Piper TTS → 播放
+- [x] **不接**：ASR、LLM
+- [x] **驗收**：能完整跑通，延遲 < 1.5s
+- [x] **Commit**：`feat(worker): dummy loop for voice layer verification` (3d52d0d)
 
 ### P2-08：Playground 最小版本
 
-- [ ] **檔案**：`web/apps/playground/**`
-- [ ] **功能**：
+- [x] **檔案**：`web/apps/playground/**`
+- [x] **功能**：
   - 頁面載入時呼叫後端 `POST /api/livekit/token` 取得 token
   - 建立 LiveKit 連線
   - 明確開啟 AEC/NS/AGC（見 plan §3.3）
   - Audio Visualizer 顯示音量
   - 狀態燈號（IDLE / LISTENING / SPEAKING）
-- [ ] **驗收**：訪問頁面能跟 agent 對話（目前只會收到 Dummy Loop 的固定回應）
-- [ ] **Commit**：`feat(playground): minimal interactive voice ui`
+- [x] **驗收**：訪問頁面能跟 agent 對話（目前只會收到 Dummy Loop 的固定回應）
+- [x] **Commit**：`feat(playground): minimal interactive voice ui` (b70cca6)
 
 ### P2-09：完整語音鏈整合
 
-- [ ] **依賴**：P2-03、P2-04、P2-07
-- [ ] **內容**：將 Dummy Loop 的「寫死回應」替換為「ASR → Phase 1 的文字鏈路 → TTS」
-- [ ] **驗收**：能進行完整語音對話（非自然流暢，不要求 Barge-in）
-- [ ] **Commit**：`feat(worker): wire full voice pipeline end-to-end`
+- [x] **依賴**：P2-03、P2-04、P2-07
+- [x] **內容**：將 Dummy Loop 的「寫死回應」替換為「ASR → Phase 1 的文字鏈路 → TTS」
+- [x] **驗收**：能進行完整語音對話（非自然流暢，不要求 Barge-in）
+- [x] **Commit**：`feat(worker): wire full voice pipeline end-to-end` (a101bdf)
 
 ### P2-10：ASR A/B 評估
 
