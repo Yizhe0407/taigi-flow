@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-import taibun.taibun as _taibun_module
+import taibun.taibun as _taibun_module  # type: ignore[import-untyped]
 from sqlalchemy import func, select
-from taibun import Converter
-from taigi_converter import TaigiConverter
+from taibun import Converter  # type: ignore[import-untyped]
+from taigi_converter import TaigiConverter  # type: ignore[import-untyped]
 
 from worker.db.models import PronunciationEntry
 
 if TYPE_CHECKING:
     from datetime import datetime
 
+    from sqlalchemy import Select
     from sqlalchemy.ext.asyncio import AsyncSession
 
 # Patch chars missing from taibun.
@@ -49,8 +50,10 @@ _TAIBUN_PATCHES: dict[str, str] = {
     "儕": "tsê",
 }
 for _ch, _rom in _TAIBUN_PATCHES.items():
-    _taibun_module.word_dict.setdefault(_ch, _rom)
-    _taibun_module.prons_dict.setdefault(_ch, [_rom])
+    word_dict: dict[str, str] = _taibun_module.word_dict  # type: ignore[assignment]
+    prons_dict: dict[str, list[str]] = _taibun_module.prons_dict  # type: ignore[assignment]
+    word_dict.setdefault(_ch, _rom)  # pyright: ignore[reportUnknownMemberType]
+    prons_dict.setdefault(_ch, [_rom])  # pyright: ignore[reportUnknownMemberType]
 
 _PROTECTED = re.compile(r"⟨([^⟩]*)⟩")
 
@@ -72,10 +75,10 @@ class TextProcessor:
         self._dictionary: list[PronunciationEntry] = []
         self._dict_loaded = False
         self._dict_last_updated: datetime | None = None
-        self._hanlo = TaigiConverter()
-        self._taibun = Converter(system="Tailo", format="number")
+        self._hanlo: Any = TaigiConverter()
+        self._taibun: Any = Converter(system="Tailo", format="number")
 
-    def _dict_query(self) -> object:
+    def _dict_query(self) -> Select[tuple[PronunciationEntry]]:
         return select(PronunciationEntry).where(
             (PronunciationEntry.profileId == self._profile_id)
             | (PronunciationEntry.profileId.is_(None))
@@ -86,7 +89,7 @@ class TextProcessor:
             self._dict_loaded = True
             return
         result = await self._db_session.execute(self._dict_query())
-        entries = list(result.scalars().all())
+        entries = list(result.scalars())
         entries.sort(key=lambda e: (-e.priority, -len(e.term)))
         self._dictionary = entries
         self._dict_last_updated = max(
@@ -106,7 +109,7 @@ class TextProcessor:
             return
         if self._dict_last_updated is None or db_max > self._dict_last_updated:
             result2 = await session.execute(self._dict_query())
-            entries = list(result2.scalars().all())
+            entries = list(result2.scalars())
             entries.sort(key=lambda e: (-e.priority, -len(e.term)))
             self._dictionary = entries
             self._dict_last_updated = db_max
@@ -115,10 +118,10 @@ class TextProcessor:
         if not zh_text:
             return ProcessResult(hanlo="", taibun="")
         protected = self._apply_dictionary(zh_text)
-        hanlo_raw: str = self._hanlo.convert(protected)  # type: ignore[assignment]
+        hanlo_raw = str(self._hanlo.convert(protected))
         # strip protection markers before passing to taibun
         hanlo = _PROTECTED.sub(r"\1", hanlo_raw)
-        taibun_text: str = self._taibun.get(hanlo) if hanlo else ""
+        taibun_text = str(self._taibun.get(hanlo)) if hanlo else ""
         return ProcessResult(hanlo=hanlo, taibun=taibun_text)
 
     def _apply_dictionary(self, text: str) -> str:

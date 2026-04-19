@@ -79,7 +79,7 @@ async def _consume(client: LLMClient) -> list[str]:
 
 @pytest.mark.asyncio
 async def test_empty_content_chunks_filtered(httpserver: HTTPServer) -> None:
-    raw_chunks = [
+    raw_chunks: list[dict[str, object]] = [
         {"choices": [{"delta": {"content": None}, "finish_reason": None}]},
         {"choices": [{"delta": {"content": "hi"}, "finish_reason": None}]},
         {"choices": [{"delta": {}, "finish_reason": "stop"}]},

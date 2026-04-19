@@ -6,6 +6,20 @@ from worker.db.models import PronunciationEntry
 from worker.pipeline.text_processor import ProcessResult, TextProcessor
 
 
+class _TextProcessorHarness(TextProcessor):
+    def set_dictionary(self, entries: list[PronunciationEntry]) -> None:
+        self._dictionary = sorted(entries, key=lambda e: (-e.priority, -len(e.term)))
+        self._dict_loaded = True
+
+    @property
+    def dict_loaded(self) -> bool:
+        return self._dict_loaded
+
+    @property
+    def dictionary(self) -> list[PronunciationEntry]:
+        return self._dictionary
+
+
 def _make_entry(term: str, replacement: str, priority: int = 0) -> PronunciationEntry:
     e = MagicMock(spec=PronunciationEntry)
     e.term = term
@@ -15,10 +29,9 @@ def _make_entry(term: str, replacement: str, priority: int = 0) -> Pronunciation
     return e
 
 
-def _processor_with_dict(entries: list[PronunciationEntry]) -> TextProcessor:
-    tp = TextProcessor()
-    tp._dictionary = sorted(entries, key=lambda e: (-e.priority, -len(e.term)))
-    tp._dict_loaded = True
+def _processor_with_dict(entries: list[PronunciationEntry]) -> _TextProcessorHarness:
+    tp = _TextProcessorHarness()
+    tp.set_dictionary(entries)
     return tp
 
 
@@ -69,7 +82,7 @@ def test_no_dictionary_does_not_crash() -> None:
 
 @pytest.mark.asyncio
 async def test_load_dictionary_no_session() -> None:
-    tp = TextProcessor(profile_id=None, db_session=None)
+    tp = _TextProcessorHarness(profile_id=None, db_session=None)
     await tp.load_dictionary()
-    assert tp._dict_loaded
-    assert tp._dictionary == []
+    assert tp.dict_loaded
+    assert tp.dictionary == []

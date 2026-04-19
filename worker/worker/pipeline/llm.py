@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
+from typing import Any
 
 from openai import AsyncOpenAI
 
@@ -25,7 +26,7 @@ class LLMClient:
         if tools:
             kwargs["tools"] = tools
 
-        stream = await asyncio.wait_for(
+        stream: Any = await asyncio.wait_for(
             self._client.chat.completions.create(**kwargs),  # type: ignore[arg-type]
             timeout=FIRST_TOKEN_TIMEOUT,
         )
@@ -34,7 +35,8 @@ class LLMClient:
             async with asyncio.timeout(timeout):
                 async for chunk in stream:
                     delta = chunk.choices[0].delta
-                    if delta.content:
-                        yield delta.content
+                    content = getattr(delta, "content", None)
+                    if isinstance(content, str):
+                        yield content
 
         return _gen()

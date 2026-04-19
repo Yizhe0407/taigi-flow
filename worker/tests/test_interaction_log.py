@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from worker.db.models import AgentProfile, InteractionLog, Session
 from worker.db.repositories import InteractionLogRepository
@@ -19,7 +19,9 @@ pytestmark = pytest.mark.skipif(
 
 
 @pytest.fixture
-async def repo() -> InteractionLogRepository:
+async def repo_bundle() -> tuple[
+    InteractionLogRepository, async_sessionmaker[AsyncSession]
+]:
     engine = create_async_engine(_ASYNC_URL, echo=False)
     factory = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -41,18 +43,24 @@ async def repo() -> InteractionLogRepository:
             )
             await db.commit()
 
-    return InteractionLogRepository(factory)
+    return InteractionLogRepository(factory), factory
 
 
 @pytest.mark.asyncio
-async def test_create_session_returns_id(repo: InteractionLogRepository) -> None:
+async def test_create_session_returns_id(
+    repo_bundle: tuple[InteractionLogRepository, async_sessionmaker[AsyncSession]],
+) -> None:
+    repo, _ = repo_bundle
     session_id = await repo.create_session("test-profile-p1", "room-test-001")
     assert isinstance(session_id, str)
     assert len(session_id) > 0
 
 
 @pytest.mark.asyncio
-async def test_log_turn_writes_to_db(repo: InteractionLogRepository) -> None:
+async def test_log_turn_writes_to_db(
+    repo_bundle: tuple[InteractionLogRepository, async_sessionmaker[AsyncSession]],
+) -> None:
+    repo, factory = repo_bundle
     session_id = await repo.create_session("test-profile-p1", "room-test-002")
     await repo.log_turn(
         session_id=session_id,
@@ -63,7 +71,7 @@ async def test_log_turn_writes_to_db(repo: InteractionLogRepository) -> None:
         taibun_text="Lí hó, ū siánn-mih ē-tàng pang lí?",
         latencies={"llm_first_tok": 342, "total": 1203},
     )
-    async with repo._factory() as db:
+    async with factory() as db:
         result = await db.execute(
             select(InteractionLog).where(InteractionLog.sessionId == session_id)
         )
@@ -77,7 +85,10 @@ async def test_log_turn_writes_to_db(repo: InteractionLogRepository) -> None:
 
 
 @pytest.mark.asyncio
-async def test_multiple_turns_sequential_index(repo: InteractionLogRepository) -> None:
+async def test_multiple_turns_sequential_index(
+    repo_bundle: tuple[InteractionLogRepository, async_sessionmaker[AsyncSession]],
+) -> None:
+    repo, factory = repo_bundle
     session_id = await repo.create_session("test-profile-p1", "room-test-003")
     for i in range(3):
         await repo.log_turn(
@@ -88,7 +99,7 @@ async def test_multiple_turns_sequential_index(repo: InteractionLogRepository) -
             hanlo_text=None,
             taibun_text=f"t{i}",
         )
-    async with repo._factory() as db:
+    async with factory() as db:
         result = await db.execute(
             select(InteractionLog)
             .where(InteractionLog.sessionId == session_id)
@@ -99,10 +110,13 @@ async def test_multiple_turns_sequential_index(repo: InteractionLogRepository) -
 
 
 @pytest.mark.asyncio
-async def test_end_session_sets_ended_at(repo: InteractionLogRepository) -> None:
+async def test_end_session_sets_ended_at(
+    repo_bundle: tuple[InteractionLogRepository, async_sessionmaker[AsyncSession]],
+) -> None:
+    repo, factory = repo_bundle
     session_id = await repo.create_session("test-profile-p1", "room-test-004")
     await repo.end_session(session_id)
-    async with repo._factory() as db:
+    async with factory() as db:
         result = await db.execute(select(Session).where(Session.id == session_id))
         session = result.scalar_one()
     assert session.endedAt is not None
