@@ -122,23 +122,7 @@ Assistant >
 
 ## 🔄 更新 HanloFlow
 
-taigi-flow 的 worker 透過 local path 引用 HanloFlow（`../../HanloFlow`）。
-
-**本機開發（editable）**：HanloFlow 改完 `.py` 直接生效，不需任何指令。若尚未設定 editable：
-
-```bash
-cd worker
-uv add --editable "../../HanloFlow"
-```
-
-**切換為 GitHub git URL**（HanloFlow push 後）：
-
-```bash
-cd worker
-uv add "taigi-converter @ git+https://github.com/Yizhe0407/HanloFlow.git"
-```
-
-之後每次 HanloFlow 有新 commit：
+HanloFlow 有新 commit push 後，在 worker 目錄執行：
 
 ```bash
 cd worker
