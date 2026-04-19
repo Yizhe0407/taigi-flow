@@ -23,6 +23,11 @@ dist/
 .turbo/
 out/
 
+# Models
+*.onnx
+*.onnx.json
+worker/models/
+
 # Misc
 .DS_Store
 *.log
