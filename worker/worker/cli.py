@@ -10,7 +10,7 @@ import time
 from dotenv import load_dotenv
 
 from worker.db.repositories import AgentProfileRepository, InteractionLogRepository
-from worker.db.session import AsyncSessionFactory
+from worker.db.session import async_session_factory
 from worker.pipeline.llm import LLMClient
 from worker.pipeline.memory import SlidingWindowMemory
 from worker.pipeline.splitter import SmartSplitter
@@ -30,9 +30,9 @@ def _make_llm() -> LLMClient:
 
 
 async def run(profile_name: str) -> None:
-    log_repo = InteractionLogRepository(AsyncSessionFactory)
+    log_repo = InteractionLogRepository(async_session_factory)
 
-    async with AsyncSessionFactory() as db:
+    async with async_session_factory() as db:
         profile_repo = AgentProfileRepository(db)
         profile = await profile_repo.get_active_by_name(profile_name)
         if profile is None:
@@ -57,7 +57,7 @@ async def run(profile_name: str) -> None:
             if not user_input:
                 continue
 
-            async with AsyncSessionFactory() as db:
+            async with async_session_factory() as db:
                 await text_proc.reload_if_updated(db)
 
             memory.add("user", user_input)

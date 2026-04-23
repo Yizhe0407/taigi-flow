@@ -60,6 +60,23 @@ def test_len_returns_turn_count() -> None:
     assert len(mem) == 2
 
 
+def test_pop_last_removes_user_on_llm_failure() -> None:
+    mem = SlidingWindowMemory(system_prompt="sys")
+    mem.add("user", "u0")
+    mem.add("assistant", "a0")
+    mem.add("user", "u1")  # LLM fails after this
+    mem.pop_last()
+    msgs = mem.to_messages()
+    assert len(msgs) == 3  # system + u0 + a0
+    assert msgs[-1] == {"role": "assistant", "content": "a0"}
+
+
+def test_pop_last_on_empty_is_noop() -> None:
+    mem = SlidingWindowMemory()
+    mem.pop_last()  # must not raise
+    assert mem.to_messages() == [{"role": "system", "content": ""}]
+
+
 def test_no_orphan_assistant_after_overflow() -> None:
     mem = SlidingWindowMemory(max_turns=2, system_prompt="s")
     for i in range(3):

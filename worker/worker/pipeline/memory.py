@@ -15,6 +15,10 @@ class SlidingWindowMemory:
     def to_messages(self) -> list[dict[str, str]]:
         return [{"role": "system", "content": self.system_prompt}] + self.history
 
+    def pop_last(self) -> None:
+        if self.history:
+            self.history.pop()
+
     def clear(self) -> None:
         self.history.clear()
 

@@ -1,11 +1,12 @@
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
 
-from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from worker.db.models import AgentProfile, InteractionLog, Session
+from worker.db.time import now_utc
 
 
 class AgentProfileRepository:
@@ -32,7 +33,7 @@ class AgentProfileRepository:
 
 
 class InteractionLogRepository:
-    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(self, session_factory: Callable[[], AsyncSession]) -> None:
         self._factory = session_factory
 
     @asynccontextmanager
@@ -52,6 +53,7 @@ class InteractionLogRepository:
                     id=session_id,
                     agentProfileId=agent_profile_id,
                     livekitRoom=livekit_room,
+                    startedAt=now_utc(),
                 )
             )
             await db.commit()
@@ -86,6 +88,7 @@ class InteractionLogRepository:
                     latencyTotal=lat.get("total"),
                     wasBargedIn=was_barged_in,
                     errorFlag=error_flag,
+                    createdAt=now_utc(),
                 )
             )
             await db.commit()
@@ -95,6 +98,6 @@ class InteractionLogRepository:
             await db.execute(
                 update(Session)
                 .where(Session.id == session_id)
-                .values(endedAt=func.now())
+                .values(endedAt=now_utc())
             )
             await db.commit()

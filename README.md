@@ -78,6 +78,12 @@ cd worker
 DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
   uv run pytest tests/ -v
 cd ..
+
+# 8. 啟動語音流程（Phase 2）
+cd web && pnpm --filter playground dev
+# 另開一個終端
+cd worker
+uv run python -m worker.main dev
 ```
 
 ### 服務一覽
@@ -90,6 +96,30 @@ cd ..
 | PostgreSQL | localhost:5432 / DB: `agent_system` |
 | Redis | localhost:6379 |
 | Cloudbeaver（DB UI）| http://localhost:8978 |
+
+### Playground 測試方式（重要）
+
+**建議先用 localhost 測試，不要先用 ngrok。**
+
+1. 以本機方式啟動：
+   - Playground: `http://localhost:3000`
+   - Worker: `uv run python -m worker.main dev`（等待 LiveKit dispatch job）
+2. 若看不到麥克風權限提示：
+   - 到瀏覽器 `localhost:3000` 的 Site settings，把 Microphone 權限 reset 後重開頁面
+3. 成功條件：
+   - 診斷區顯示 `LiveKit connected: yes`
+   - `Local microphone enabled: yes`
+   - `Your voice` 波形會動
+
+#### ngrok 為什麼常常 Disconnected？
+
+若頁面走 `https://...ngrok...`，LiveKit 必須同時提供可從外網連線的 **`wss://`** 位址。  
+只 tunnel `:3000` 但仍讓前端連 `ws://localhost:7880`，一定會失敗。
+
+要用 ngrok，至少要滿足：
+
+1. `NEXT_PUBLIC_LIVEKIT_URL` 設成可公開的 `wss://...`
+2. 該 `wss` 位址可從瀏覽器所在網路實際連到 LiveKit
 
 **Cloudbeaver 初次設定**：進入 http://localhost:8978 後連線設定填：
 - Host: `postgres`、Port: `5432`、DB: `agent_system`
@@ -136,8 +166,11 @@ Worker 預設使用 Ollama（OpenAI-compatible API）：
 | 環境變數 | 預設值 |
 |---------|--------|
 | `LLM_BASE_URL` | `http://100.107.45.116:11434/v1` |
-| `LLM_MODEL` | `frob/qwen3.5-instruct:4b` |
+| `LLM_MODEL` | `frob/qwen3.5-instruct:9b` |
 | `LLM_API_KEY` | `ollama` |
+
+> `worker.main` 會優先讀 `LLM_BASE_URL` / `LLM_API_KEY`，
+> 若未設定則 fallback 到 `OPENAI_BASE_URL` / `OPENAI_API_KEY`。
 
 可在 `.env` 中覆寫，或在執行指令前設定：
 
@@ -169,9 +202,10 @@ LLM_MODEL="llama3.2" \
 │       └── api-client/       # 後端 API 封裝
 └── worker/                    # Agent Worker (Python + uv)
     ├── worker/
-    │   ├── pipeline/         # memory / splitter / llm / text_processor
+    │   ├── session/          # 對話協調層（AgentComponents + PipelineRunner）
+    │   ├── audio/            # 音訊 I/O 層（VAD + AudioProcessor + Barge-in FSM）
+    │   ├── pipeline/         # 純計算元件（ASR / LLM / TTS / memory / splitter）
     │   ├── db/               # SQLAlchemy models + repositories
-    │   ├── controller/       # VAD + Barge-in FSM（Phase 4）
     │   ├── tools/            # Function calling tools（Phase 6）
     │   └── observability/    # 延遲計時器
     ├── tests/

@@ -93,7 +93,7 @@
 - [x] **動作**：
   - 建立 `worker/` 目錄
   - `uv init` 建立 Python 專案（Python 3.11+）
-  - 建立完整目錄結構（`controller/`, `pipeline/`, `pipeline/asr/`, `tools/`, `db/`, `observability/`）
+  - 建立完整目錄結構（`session/`, `audio/`, `pipeline/`, `pipeline/asr/`, `tools/`, `db/`, `observability/`）
   - 每個子目錄放一個 `__init__.py`
   - 建立 `worker/main.py` 印 "Worker ready"
   - 設定 `pyproject.toml` 含基本依賴（`livekit-agents`, `sqlalchemy`, `pydantic`, `ruff`, `pytest`, `pyright`）

@@ -96,7 +96,17 @@
 
 ### 檔案組織
 
-嚴格遵守 `docs/plan.md §3.1` 與 `§7.1` 的目錄結構。**新增檔案前先檢查該目錄是否已有適合的位置**，不要隨便開新目錄。
+遵守以下目錄結構（與 `docs/plan.md §3.1` 同步）。**新增檔案前先檢查該目錄是否已有適合的位置**，不要隨便開新目錄。
+
+```
+worker/worker/
+├── session/        # 單次對話的狀態與協調（AgentComponents、PipelineRunner）
+├── audio/          # 音訊 I/O 層（VAD、AudioProcessor、Barge-in FSM）
+├── pipeline/       # 純計算元件，stateless（ASR / LLM / TTS / memory / splitter）
+├── db/             # 資料存取層（models、repositories、session、time）
+├── tools/          # Function calling tools
+└── observability/  # 延遲計時器
+```
 
 ---
 

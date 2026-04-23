@@ -1,9 +1,11 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from worker.db.time import now_utc
 
 
 class Base(DeclarativeBase):
@@ -22,12 +24,14 @@ class AgentProfile(Base):
     tools: Mapped[list[str]] = mapped_column(JSONB, nullable=False)
     isActive: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     createdAt: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=False),
+        default=now_utc,
+        nullable=False,
     )
     updatedAt: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=False),
+        default=now_utc,
+        onupdate=now_utc,
         nullable=False,
     )
 
@@ -45,10 +49,12 @@ class Session(Base):
     )
     livekitRoom: Mapped[str] = mapped_column(String, nullable=False)
     startedAt: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=False),
+        default=now_utc,
+        nullable=False,
     )
     endedAt: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime(timezone=False), nullable=True
     )
 
     agentProfile: Mapped[AgentProfile] = relationship(
@@ -82,7 +88,9 @@ class InteractionLog(Base):
     errorFlag: Mapped[str | None] = mapped_column(String, nullable=True)
 
     createdAt: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=False),
+        default=now_utc,
+        nullable=False,
     )
 
     session: Mapped[Session] = relationship("Session", back_populates="logs")
@@ -98,11 +106,13 @@ class PronunciationEntry(Base):
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     note: Mapped[str | None] = mapped_column(String, nullable=True)
     createdAt: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
+        DateTime(timezone=False),
+        default=now_utc,
+        nullable=False,
     )
     updatedAt: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
+        DateTime(timezone=False),
+        default=now_utc,
+        onupdate=now_utc,
         nullable=False,
     )

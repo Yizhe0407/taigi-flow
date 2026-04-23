@@ -1,19 +1,19 @@
 # pyright: reportUnknownMemberType=false, reportUnknownVariableType=false
-import io
 import os
-import wave
 from collections.abc import AsyncIterator
 
 import aiohttp
 
-from .base import ASRPartial, BaseASR
+from .base import ASRPartial, BaseASR, pcm_to_wav
 
 
 class BreezeASR26(BaseASR):
     def __init__(self) -> None:
         self._api_url = os.getenv(
-            "ASR_URL", "http://localhost:8000/v1/audio/transcriptions"
+            "BREEZE_ASR_URL",
+            os.getenv("ASR_URL", "http://localhost:8000/v1/audio/transcriptions"),
         )
+        self._model = os.getenv("BREEZE_ASR_MODEL", "breeze-asr-26")
 
     async def warmup(self) -> None:
         # No local warmup needed, it's an API call
@@ -30,15 +30,7 @@ class BreezeASR26(BaseASR):
         yield ASRPartial(text=text, is_final=True)
 
     async def _transcribe_full(self, audio_bytes: bytes) -> str:
-        # Convert raw 16kHz PCM to WAV format in memory
-        wav_io = io.BytesIO()
-        with wave.open(wav_io, "wb") as wav_file:
-            wav_file.setnchannels(1)
-            wav_file.setsampwidth(2)  # 16-bit
-            wav_file.setframerate(16000)
-            wav_file.writeframes(audio_bytes)
-        
-        wav_data = wav_io.getvalue()
+        wav_data = pcm_to_wav(audio_bytes)
 
         form_data = aiohttp.FormData()
         form_data.add_field(
@@ -47,13 +39,15 @@ class BreezeASR26(BaseASR):
             filename="audio.wav",
             content_type="audio/wav",
         )
-        form_data.add_field("language", "auto")
+        form_data.add_field("language", "zh")
+        form_data.add_field("model", self._model)
         form_data.add_field("max_gap_sec", "0.6")
         form_data.add_field("return_timestamps", "true")
 
         try:
+            timeout = aiohttp.ClientTimeout(total=30)
             async with (
-                aiohttp.ClientSession() as session,
+                aiohttp.ClientSession(timeout=timeout) as session,
                 session.post(self._api_url, data=form_data) as response,
             ):
                 if response.status == 200:
@@ -67,4 +61,4 @@ class BreezeASR26(BaseASR):
 
     @property
     def name(self) -> str:
-        return "breeze-asr-26 (API)"
+        return f"{self._model} (API)"

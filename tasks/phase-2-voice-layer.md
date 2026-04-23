@@ -37,7 +37,7 @@
 
 ### P2-02：Silero VAD 整合
 
-- [x] **檔案**：`worker/controller/vad.py`
+- [x] **檔案**：`worker/audio/vad.py`
 - [x] **驗收**：餵音訊 chunk 能正確回報 speech start / end 事件
 - [x] **Commit**：`feat(worker): integrate silero vad` (f171ffb)
 

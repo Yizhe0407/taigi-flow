@@ -25,7 +25,7 @@
 
 ### P3-02：Fallback 音訊預生成
 
-- [ ] **檔案**：`worker/controller/fallback.py`、`worker/assets/fallback/`
+- [ ] **檔案**：`worker/audio/fallback.py`、`worker/assets/fallback/`
 - [ ] **內容**：啟動時用 Piper 預生成 plan §5.1 列出的 5 段 fallback 音訊，載入記憶體
 - [ ] **驗收**：能透過 `play_fallback(kind)` 播放對應音訊
 - [ ] **Commit**：`feat(worker): add fallback audio pregeneration`

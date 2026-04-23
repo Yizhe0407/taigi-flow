@@ -1,10 +1,37 @@
 import asyncio
+import logging
+import os
 from collections.abc import AsyncIterator
 from typing import Any
 
 from openai import AsyncOpenAI
 
-FIRST_TOKEN_TIMEOUT = 5.0
+logger = logging.getLogger(__name__)
+
+
+def parse_first_token_timeout(raw: str | None, default: float = 15.0) -> float:
+    if raw is None:
+        return default
+    try:
+        timeout = float(raw)
+    except ValueError:
+        logger.warning(
+            "Invalid LLM_FIRST_TOKEN_TIMEOUT=%s, fallback to %.1fs",
+            raw,
+            default,
+        )
+        return default
+    if timeout <= 0:
+        logger.warning(
+            "Non-positive LLM_FIRST_TOKEN_TIMEOUT=%s, fallback to %.1fs",
+            raw,
+            default,
+        )
+        return default
+    return timeout
+
+
+FIRST_TOKEN_TIMEOUT = parse_first_token_timeout(os.getenv("LLM_FIRST_TOKEN_TIMEOUT"))
 
 
 class LLMClient:
@@ -26,10 +53,15 @@ class LLMClient:
         if tools:
             kwargs["tools"] = tools
 
-        stream: Any = await asyncio.wait_for(
-            self._client.chat.completions.create(**kwargs),  # type: ignore[arg-type]
-            timeout=FIRST_TOKEN_TIMEOUT,
-        )
+        try:
+            stream: Any = await asyncio.wait_for(
+                self._client.chat.completions.create(**kwargs),  # type: ignore[arg-type]
+                timeout=FIRST_TOKEN_TIMEOUT,
+            )
+        except TimeoutError as e:
+            raise TimeoutError(
+                f"LLM first token timeout after {FIRST_TOKEN_TIMEOUT:.1f}s"
+            ) from e
 
         async def _gen() -> AsyncIterator[str]:
             async with asyncio.timeout(timeout):

@@ -5,7 +5,11 @@ import pytest
 from pytest_httpserver import HTTPServer
 from werkzeug import Request, Response
 
-from worker.pipeline.llm import FIRST_TOKEN_TIMEOUT, LLMClient
+from worker.pipeline.llm import (
+    FIRST_TOKEN_TIMEOUT,
+    LLMClient,
+    parse_first_token_timeout,
+)
 
 
 def _sse_response(tokens: list[str], model: str = "test") -> str:
@@ -96,3 +100,13 @@ async def test_empty_content_chunks_filtered(httpserver: HTTPServer) -> None:
     async for tok in await client.stream([{"role": "user", "content": "hi"}]):
         tokens.append(tok)
     assert tokens == ["hi"]
+
+
+def test_parse_first_token_timeout_valid() -> None:
+    assert parse_first_token_timeout("3.5") == 3.5
+
+
+def test_parse_first_token_timeout_invalid_fallback() -> None:
+    assert parse_first_token_timeout("abc", default=9.0) == 9.0
+    assert parse_first_token_timeout("-1", default=9.0) == 9.0
+    assert parse_first_token_timeout("0", default=9.0) == 9.0

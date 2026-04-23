@@ -1,5 +1,4 @@
 import os
-from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
@@ -7,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from worker.db.models import AgentProfile, InteractionLog, Session
 from worker.db.repositories import InteractionLogRepository
+from worker.db.time import now_utc
 
 _DB_URL = os.environ.get("DATABASE_URL", "")
 _ASYNC_URL = (
@@ -29,7 +29,7 @@ async def repo_bundle() -> tuple[
     async with factory() as db:
         existing = await db.get(AgentProfile, "test-profile-p1")
         if existing is None:
-            now = datetime.now(UTC)
+            now = now_utc()
             db.add(
                 AgentProfile(
                     id="test-profile-p1",

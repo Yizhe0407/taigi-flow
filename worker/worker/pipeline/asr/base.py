@@ -1,6 +1,19 @@
+import io
+import wave
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+
+
+def pcm_to_wav(pcm: bytes, sample_rate: int = 16000) -> bytes:
+    """Convert raw 16-bit mono PCM bytes to WAV."""
+    wav_io = io.BytesIO()
+    with wave.open(wav_io, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm)
+    return wav_io.getvalue()
 
 
 @dataclass
@@ -14,6 +27,13 @@ class ASRPartial:
 
 class BaseASR(ABC):
     """所有 ASR 實作必須遵循此介面"""
+
+    @property
+    @abstractmethod
+    def name(self) -> str: ...
+
+    @abstractmethod
+    async def warmup(self) -> None: ...
 
     @abstractmethod
     async def stream(

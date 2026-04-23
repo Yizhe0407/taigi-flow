@@ -18,7 +18,7 @@ Barge-in 最常見的 bug 不是「偵測不到」，而是「誤觸發」（被
 
 ### P4-01：Voice Controller FSM
 
-- [ ] **檔案**：`worker/controller/voice_controller.py`
+- [ ] **檔案**：`worker/audio/voice_controller.py`
 - [ ] **參照**：`docs/plan.md §3.2` 的狀態機表
 - [ ] **內容**：實作 IDLE / LISTENING / THINKING / SPEAKING / BARGED_IN 五個狀態與轉換
 - [ ] **測試**：針對每個狀態轉換寫 unit test
@@ -26,14 +26,14 @@ Barge-in 最常見的 bug 不是「偵測不到」，而是「誤觸發」（被
 
 ### P4-02：動態 VAD 門檻
 
-- [ ] **檔案**：`worker/controller/vad.py`（擴充）
+- [ ] **檔案**：`worker/audio/vad.py`（擴充）
 - [ ] **參照**：`docs/plan.md §3.3` 的 `vad_threshold_dynamic`
 - [ ] **內容**：SPEAKING 狀態且剛送出音訊 < 200ms 內，提高 VAD 觸發門檻
 - [ ] **Commit**：`feat(worker): add dynamic vad threshold for self-speech suppression`
 
 ### P4-03：完整清理序列
 
-- [ ] **檔案**：`worker/controller/voice_controller.py`（擴充）
+- [ ] **檔案**：`worker/audio/voice_controller.py`（擴充）
 - [ ] **參照**：`docs/plan.md §3.2` 的 `on_barge_in` 範例
 - [ ] **內容**：實作六步清理序列（停音訊 → 清 TTS → 取消 LLM → flush splitter → 寫 log → 重置 buffer）
 - [ ] **關鍵**：順序正確，不可調換

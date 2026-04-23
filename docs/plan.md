@@ -231,10 +231,14 @@ model KnowledgeChunk {
 
 ```
 worker/
-├── main.py                    # LiveKit Agent 入口
-├── controller/
-│   ├── voice_controller.py    # VAD + Barge-in 狀態機
-│   └── session_state.py       # 本次對話狀態
+├── main.py                    # LiveKit Agent 入口（薄層，只做接線）
+├── session/
+│   ├── components.py          # AgentComponents dataclass + 元件 factory
+│   └── runner.py              # PipelineRunner（ASR→LLM→TTS 協調）
+├── audio/
+│   ├── vad.py                 # SileroVAD 包裝
+│   ├── processor.py           # AudioProcessor（VAD 事件消費 + fallback RMS）
+│   └── voice_controller.py    # Barge-in 狀態機（Phase 4 實作）
 ├── pipeline/
 │   ├── asr/
 │   │   ├── base.py            # BaseASR 抽象介面
@@ -250,10 +254,17 @@ worker/
 │   └── tdx.py                 # 交通部 TDX
 ├── db/
 │   ├── models.py              # SQLAlchemy 對應 Prisma schema
-│   └── repositories.py        # DB 操作封裝
+│   ├── repositories.py        # DB 操作封裝
+│   ├── session.py             # AsyncSession factory
+│   └── time.py                # UTC 時區工具
 └── observability/
     └── metrics.py             # 延遲計時器
 ```
+
+**分層原則：**
+- `session/`：單次對話的狀態與協調（有 state 的物件）
+- `audio/`：音訊 I/O 層（VAD、音訊串流處理、Barge-in FSM）
+- `pipeline/`：純計算元件，stateless，可獨立測試
 
 ### 3.2 Barge-in 狀態機（完整實作）
 

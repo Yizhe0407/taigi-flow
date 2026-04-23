@@ -3,130 +3,64 @@ import asyncio
 import logging
 import os
 
-import numpy as np
+from dotenv import load_dotenv
 from livekit import rtc
-from livekit.agents import AutoSubscribe, JobContext, WorkerOptions, cli
-from livekit.agents.vad import VADEventType
+from livekit.agents import AutoSubscribe, JobContext, JobRequest, WorkerOptions, cli
 
-from .controller.vad import SileroVAD
-from .pipeline.asr.base import BaseASR  # noqa: TC001
-from .pipeline.asr.breeze import BreezeASR26
-from .pipeline.asr.qwen3 import Qwen3ASR
-from .pipeline.llm import LLMClient
-from .pipeline.memory import SlidingWindowMemory
-from .pipeline.splitter import SmartSplitter
-from .pipeline.text_processor import TextProcessor
-from .pipeline.tts import PiperTTS
+from .audio.processor import AudioProcessor
+from .audio.vad import SileroVAD
+from .session.components import build_components
+from .session.runner import PipelineRunner
 
 logger = logging.getLogger("worker")
+
+
+async def request_fnc(req: JobRequest) -> None:
+    logger.info("Accepting job for room %s", req.room.name)
+    await req.accept()
 
 
 async def entrypoint(ctx: JobContext) -> None:
     logger.info("Agent starting...")
 
-    # 訂閱使用者音訊
-    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
-    logger.info(f"Connected to room: {ctx.room.name}")
+    components = await build_components()
 
-    # 發佈 Agent 音訊 (建立音訊來源與軌道)
-    source = rtc.AudioSource(16000, 1)
-    track = rtc.LocalAudioTrack.create_audio_track("agent-mic", source)
+    track = rtc.LocalAudioTrack.create_audio_track("agent-mic", components.audio_source)
     options = rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE)
 
-    publication = await ctx.room.local_participant.publish_track(track, options)
-    logger.info(f"Published agent audio track: {publication.sid}")
-
     vad = SileroVAD()
+    runner = PipelineRunner(components)
+    processor = AudioProcessor(vad=vad, runner=runner)
+    active_audio_tracks: set[str] = set()
+    _track_tasks: set[asyncio.Task[None]] = set()
 
-    try:
-        tts = PiperTTS(model_path="models/taigi.onnx")
-    except Exception as e:
-        logger.warning(f"PiperTTS init failed: {e}")
-        tts = None
-
-    asr_name = os.getenv("ASR_BACKEND", "qwen3")
-    asr: BaseASR = Qwen3ASR() if asr_name == "qwen3" else BreezeASR26()
-    
-    logger.info(f"Warming up ASR: {asr.name}")
-    try:
-        await asr.warmup()
-    except Exception as e:
-        logger.error(f"ASR warmup failed: {e}")
-
-    llm = LLMClient(
-        base_url=os.getenv("OPENAI_BASE_URL", "http://100.107.45.116:11434/v1"),
-        api_key=os.getenv("OPENAI_API_KEY", "ollama"),
-        model=os.getenv("LLM_MODEL", "frob/qwen3.5-instruct:9b"),
-    )
-    memory = SlidingWindowMemory(
-        system_prompt="你是一個會講台語的 AI 助理。請用繁體中文（漢羅混寫）回答。"
-    )
-    text_processor = TextProcessor()
-    await text_processor.load_dictionary()
-
-    async def _speak_taibun(taibun: str) -> None:
-        if not tts:
+    def _start_track(
+        track: rtc.Track,
+        pub: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
+        if track.kind != rtc.TrackKind.KIND_AUDIO:
             return
-        try:
-            async for chunk in tts.synthesize(taibun):
-                audio_array = np.frombuffer(chunk, dtype=np.int16)
-                frame = rtc.AudioFrame(
-                    data=chunk,
-                    sample_rate=16000,
-                    num_channels=1,
-                    samples_per_channel=len(audio_array),
-                )
-                await asyncio.to_thread(source.capture_frame, frame)
-        except Exception as e:
-            logger.error(f"TTS synthesis failed: {e}")
-
-    async def _process_utterance(audio_bytes: bytes) -> None:
-        logger.info("Processing utterance...")
-
-        # 1. ASR
-        async def _audio_gen():
-            yield audio_bytes
-            
-        user_text = ""
-        try:
-            async for partial in asr.stream(_audio_gen()):
-                if partial.is_final:
-                    user_text = partial.text
-        except Exception as e:
-            logger.error(f"ASR failed: {e}")
+        if pub.sid in active_audio_tracks:
             return
+        active_audio_tracks.add(pub.sid)
+        logger.info(
+            "Subscribed to audio track: participant=%s source=%s sid=%s",
+            participant.identity,
+            pub.source,
+            pub.sid,
+        )
+        track_sid = pub.sid
 
-        if not user_text.strip():
-            logger.info("ASR returned empty string.")
-            return
+        async def _run() -> None:
+            try:
+                await processor.process_track(track)
+            finally:
+                active_audio_tracks.discard(track_sid)
 
-        logger.info(f"User said: {user_text}")
-        memory.add("user", user_text)
-
-        # 2. LLM
-        splitter = SmartSplitter()
-        try:
-            full_response = ""
-            async for token in await llm.stream(messages=memory.to_messages()):
-                full_response += token
-                sentences = splitter.feed(token)
-                for sentence in sentences:
-                    # 3. Text Pipeline & 4. TTS
-                    res = text_processor.process(sentence)
-                    if res.taibun.strip():
-                        logger.info(f"Speaking: {res.hanlo} ({res.taibun})")
-                        await _speak_taibun(res.taibun)
-
-            rest = splitter.flush()
-            if rest:
-                res = text_processor.process(rest)
-                if res.taibun.strip():
-                    logger.info(f"Speaking: {res.hanlo} ({res.taibun})")
-                    await _speak_taibun(res.taibun)
-
-            memory.add("assistant", full_response)
-        except Exception as e:
-            logger.error(f"LLM/Pipeline failed: {e}")
+        task = asyncio.create_task(_run())
+        _track_tasks.add(task)
+        task.add_done_callback(_track_tasks.discard)
 
     @ctx.room.on("track_subscribed")
     def on_track_subscribed(
@@ -134,38 +68,37 @@ async def entrypoint(ctx: JobContext) -> None:
         pub: rtc.RemoteTrackPublication,
         participant: rtc.RemoteParticipant,
     ) -> None:
-        if track.kind == rtc.TrackKind.KIND_AUDIO:
-            logger.info("Subscribed to audio track")
-            
-            async def _process_audio() -> None:
-                audio_stream = rtc.AudioStream(track)
-                vad_stream = vad.stream()
+        _start_track(track, pub, participant)
 
-                is_speaking = False
-                speech_buffer = bytearray()
+    @ctx.room.on("track_unsubscribed")
+    def on_track_unsubscribed(
+        track: rtc.Track,
+        pub: rtc.RemoteTrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
+        if track.kind != rtc.TrackKind.KIND_AUDIO:
+            return
+        if pub.sid in active_audio_tracks:
+            active_audio_tracks.discard(pub.sid)
+            logger.info(
+                "Unsubscribed audio track: participant=%s sid=%s",
+                participant.identity,
+                pub.sid,
+            )
 
-                async def _consume_vad() -> None:
-                    nonlocal is_speaking, speech_buffer
-                    async for event in vad_stream:
-                        if event.type == VADEventType.START_OF_SPEECH:
-                            is_speaking = True
-                            speech_buffer.clear()
-                        elif event.type == VADEventType.END_OF_SPEECH:
-                            if is_speaking:
-                                is_speaking = False
-                                asyncio.create_task(_process_utterance(bytes(speech_buffer)))
-                                speech_buffer.clear()
+    await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
+    logger.info("Connected to room: %s", ctx.room.name)
 
-                asyncio.create_task(_consume_vad())
+    publication = await ctx.room.local_participant.publish_track(track, options)
+    logger.info("Published agent audio track: %s", publication.sid)
 
-                async for frame_event in audio_stream:
-                    vad_stream.push_frame(frame_event.frame)
-                    if is_speaking:
-                        speech_buffer.extend(frame_event.frame.data)
+    # Handle tracks already subscribed before our handlers were registered
+    for participant in ctx.room.remote_participants.values():
+        for pub in participant.track_publications.values():
+            if pub.track and pub.subscribed:
+                assert isinstance(pub.track, rtc.Track)
+                _start_track(pub.track, pub, participant)
 
-            asyncio.create_task(_process_audio())
-
-    # Keep the job running
     try:
         while True:
             await asyncio.sleep(1)
@@ -174,9 +107,11 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 def main() -> None:
+    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
+            request_fnc=request_fnc,
             agent_name="taigi-agent",
         )
     )
