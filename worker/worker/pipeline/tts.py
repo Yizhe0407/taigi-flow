@@ -50,6 +50,8 @@ class PiperTTS:
 
         if self.voice is None:
             raise RuntimeError("Piper voice is not initialized")
+        # pyright can't narrow self.voice across the closure boundary
+        voice = self.voice
 
         # To avoid blocking the event loop and handle barge-in gracefully,
         # run the synthesis in a thread and yield chunks.
@@ -59,7 +61,7 @@ class PiperTTS:
         def _synthesize_task() -> None:
             try:
                 syn_config = SynthesisConfig(speaker_id=self.speaker_id)
-                for chunk in self.voice.synthesize(
+                for chunk in voice.synthesize(
                     taibun_text, syn_config=syn_config
                 ):  # type: ignore
                     if self._clear_event.is_set():
