@@ -3,20 +3,23 @@ from __future__ import annotations
 import dataclasses
 import logging
 import os
+from typing import TYPE_CHECKING
 
 from livekit import rtc
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from ..db.repositories import AgentProfileRepository
 from ..db.session import async_session_factory
-from ..pipeline.asr.base import BaseASR
 from ..pipeline.asr.breeze import BreezeASR26
 from ..pipeline.asr.qwen3 import Qwen3ASR
 from ..pipeline.llm import LLMClient
 from ..pipeline.memory import SlidingWindowMemory
 from ..pipeline.text_processor import TextProcessor
 from ..pipeline.tts import PiperTTS
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from ..pipeline.asr.base import BaseASR
 
 logger = logging.getLogger("worker.session.components")
 
@@ -66,7 +69,9 @@ def _build_asr() -> BaseASR:
         return Qwen3ASR()
     if asr_name in {"breeze", "breeze26", "breeze-asr-26"}:
         return BreezeASR26()
-    raise ValueError(f"Unsupported ASR_BACKEND='{asr_name}'. Expected qwen3 or breeze26.")
+    raise ValueError(
+        f"Unsupported ASR_BACKEND='{asr_name}'. Expected qwen3 or breeze26."
+    )
 
 
 def _build_llm() -> LLMClient:
@@ -85,7 +90,9 @@ async def _load_profile(db: AsyncSession, profile_name: str) -> tuple[str, str |
     repo = AgentProfileRepository(db)
     profile = await repo.get_active_by_name(profile_name)
     if profile is None:
-        logger.warning("Profile '%s' not found or inactive, using fallback prompt.", profile_name)
+        logger.warning(
+            "Profile '%s' not found or inactive, using fallback prompt.", profile_name
+        )
         return _FALLBACK_SYSTEM_PROMPT, None
     logger.info("Using profile '%s' from database.", profile.name)
     return profile.systemPrompt, profile.id

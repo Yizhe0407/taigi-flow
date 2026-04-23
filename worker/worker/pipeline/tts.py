@@ -128,11 +128,13 @@ class PiperTTS:
                         return self._wav_to_pcm(wav_bytes)
             except RuntimeError:
                 raise  # Re-raise permanent errors (4xx) without sleeping
-            except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+            except (TimeoutError, aiohttp.ClientError) as e:
                 last_error = e
             await asyncio.sleep(0.2 * _attempt)
 
-        raise RuntimeError(f"Failed to call TTS API after retries: {last_error}") from last_error
+        raise RuntimeError(
+            f"Failed to call TTS API after retries: {last_error}"
+        ) from last_error
 
     @staticmethod
     def _wav_to_pcm(wav_bytes: bytes) -> bytes:
@@ -143,7 +145,9 @@ class PiperTTS:
             raw = wav_reader.readframes(wav_reader.getnframes())
 
         if sample_width == 1:
-            arr: np.ndarray = (np.frombuffer(raw, dtype=np.uint8).astype(np.int16) - 128) * 256
+            arr: np.ndarray = (
+                np.frombuffer(raw, dtype=np.uint8).astype(np.int16) - 128
+            ) * 256
         elif sample_width == 2:
             arr = np.frombuffer(raw, dtype=np.int16).copy()
         elif sample_width == 4:

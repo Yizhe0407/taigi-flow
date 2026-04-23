@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import AsyncIterator
+from typing import TYPE_CHECKING
 
 from livekit import rtc
 
 from ..pipeline.splitter import SmartSplitter
-from .components import AgentComponents
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from .components import AgentComponents
 
 logger = logging.getLogger("worker.session.runner")
 
@@ -25,7 +29,9 @@ class PipelineRunner:
 
     async def speak_taibun(self, taibun: str, trace_id: str) -> None:
         if not self._tts:
-            logger.warning("[%s][tts] skipped because PiperTTS is unavailable", trace_id)
+            logger.warning(
+                "[%s][tts] skipped because PiperTTS is unavailable", trace_id
+            )
             return
         try:
             chunk_count = 0
@@ -42,13 +48,23 @@ class PipelineRunner:
                 for j in range(n_full):
                     sub = data[j * chunk_size : (j + 1) * chunk_size]
                     await self._audio_source.capture_frame(
-                        rtc.AudioFrame(data=sub, sample_rate=16000, num_channels=1, samples_per_channel=chunk_size // 2)
+                        rtc.AudioFrame(
+                            data=sub,
+                            sample_rate=16000,
+                            num_channels=1,
+                            samples_per_channel=chunk_size // 2,
+                        )
                     )
                 leftover = data[n_full * chunk_size :]
             if leftover:
                 padded = leftover + b"\x00" * (chunk_size - len(leftover))
                 await self._audio_source.capture_frame(
-                    rtc.AudioFrame(data=padded, sample_rate=16000, num_channels=1, samples_per_channel=chunk_size // 2)
+                    rtc.AudioFrame(
+                        data=padded,
+                        sample_rate=16000,
+                        num_channels=1,
+                        samples_per_channel=chunk_size // 2,
+                    )
                 )
             logger.info(
                 "[%s][tts] done chunks=%s bytes=%s cost_ms=%.1f",
@@ -68,15 +84,21 @@ class PipelineRunner:
             try:
                 await self.speak_taibun(res.taibun, trace_id)
             except Exception as e:
-                logger.error("[%s][notice] tts failed, user will hear silence: %s", trace_id, e)
+                logger.error(
+                    "[%s][notice] tts failed, user will hear silence: %s",
+                    trace_id,
+                    e,
+                )
 
-    async def process_utterance(self, audio_bytes: bytes, source_tag: str = "unknown") -> None:
+    async def process_utterance(
+        self, audio_bytes: bytes, source_tag: str = "unknown"
+    ) -> None:
         # Safe without a lock: asyncio is single-threaded and there is no `await`
         # between the check and the assignment, so no concurrent task can interleave.
         # Do NOT insert an `await` between these two lines.
         if self._pipeline_busy:
             logger.info(
-                "[pipeline] skipping utterance because previous one is still running bytes=%s",
+                "[pipeline] skipping utterance, previous still running bytes=%s",
                 len(audio_bytes),
             )
             return
@@ -84,7 +106,12 @@ class PipelineRunner:
         self._utterance_seq += 1
         trace_id = f"utt-{self._utterance_seq:04d}"
         pipeline_start = time.perf_counter()
-        logger.info("[%s][pipeline] start bytes=%s source=%s", trace_id, len(audio_bytes), source_tag)
+        logger.info(
+            "[%s][pipeline] start bytes=%s source=%s",
+            trace_id,
+            len(audio_bytes),
+            source_tag,
+        )
 
         try:
             user_text = await self._run_asr(audio_bytes, trace_id)
@@ -92,7 +119,9 @@ class PipelineRunner:
                 return
             if not user_text.strip():
                 logger.info("[%s][asr] returned empty text", trace_id)
-                await self.speak_notice("歹勢，我這馬聽無清楚，你閣講一遍好無？", trace_id)
+                await self.speak_notice(
+                    "歹勢，我這馬聽無清楚，你閣講一遍好無？", trace_id
+                )
                 return
 
             logger.info("[%s][asr] user_text=%s", trace_id, user_text)
@@ -143,7 +172,9 @@ class PipelineRunner:
                 (time.perf_counter() - asr_start) * 1000,
                 e,
             )
-            await self.speak_notice("歹勢，語音辨識服務目前無法連線，請稍後再試。", trace_id)
+            await self.speak_notice(
+                "歹勢，語音辨識服務目前無法連線，請稍後再試。", trace_id
+            )
             return None
 
     async def _run_llm_tts(self, trace_id: str) -> None:

@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 from livekit import rtc
 from livekit.agents.vad import VADEventType
 
-from ..session.runner import PipelineRunner
-from .vad import SileroVAD
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
+    from ..session.runner import PipelineRunner
+    from .vad import SileroVAD
 
 logger = logging.getLogger("worker.audio.processor")
 
@@ -98,7 +100,9 @@ class AudioProcessor:
                         )
                         if utterance:
                             self._spawn(
-                                self._runner.process_utterance(utterance, "vad_end_of_speech")
+                                self._runner.process_utterance(
+                                    utterance, "vad_end_of_speech"
+                                )
                             )
                         vad_speech_buffer.clear()
             except asyncio.CancelledError:
@@ -114,7 +118,8 @@ class AudioProcessor:
                 frame_count += 1
                 if frame_count == 1:
                     logger.info(
-                        "First audio frame: sample_rate=%s channels=%s samples_per_channel=%s",
+                        "First audio frame: sample_rate=%s channels=%s"
+                        " samples_per_channel=%s",
                         frame_event.frame.sample_rate,
                         frame_event.frame.num_channels,
                         frame_event.frame.samples_per_channel,
@@ -147,7 +152,10 @@ class AudioProcessor:
                             len(forced_window_buffer),
                         )
                         if forced_rms >= _FORCED_WINDOW_RMS_THRESHOLD:
-                            logger.info("Forced window trigger, bytes=%s", len(forced_window_buffer))
+                            logger.info(
+                                "Forced window trigger, bytes=%s",
+                                len(forced_window_buffer),
+                            )
                             self._spawn(
                                 self._runner.process_utterance(
                                     bytes(forced_window_buffer), "forced_window"
@@ -164,14 +172,17 @@ class AudioProcessor:
                     fallback_rms_noise_ema = frame_rms
                     fallback_has_noise_ema = True
                 elif not fallback_speaking:
-                    fallback_rms_noise_ema = fallback_rms_noise_ema * 0.98 + frame_rms * 0.02
+                    fallback_rms_noise_ema = (
+                        fallback_rms_noise_ema * 0.98 + frame_rms * 0.02
+                    )
 
                 fallback_rms_threshold = max(12.0, fallback_rms_noise_ema * 1.6)
                 has_voice = frame_rms >= fallback_rms_threshold
 
                 if frame_count % 200 == 0:
                     logger.info(
-                        "Fallback RMS monitor: rms=%.1f noise=%.1f threshold=%.1f speaking=%s",
+                        "Fallback RMS monitor: rms=%.1f noise=%.1f"
+                        " threshold=%.1f speaking=%s",
                         frame_rms,
                         fallback_rms_noise_ema,
                         fallback_rms_threshold,
@@ -183,7 +194,8 @@ class AudioProcessor:
                         window_rms = _rms(bytes(fallback_window_buffer))
                         if window_rms >= fallback_rms_threshold:
                             logger.info(
-                                "Fallback window trigger, bytes=%s window_rms=%.1f threshold=%.1f",
+                                "Fallback window trigger, bytes=%s"
+                                " window_rms=%.1f threshold=%.1f",
                                 len(fallback_window_buffer),
                                 window_rms,
                                 fallback_rms_threshold,
@@ -222,7 +234,9 @@ class AudioProcessor:
                         fallback_speaking = False
                         fallback_buffer.clear()
 
-                if fallback_speaking and t - fallback_start_ts >= _FALLBACK_MAX_SPEECH_SEC:
+                if fallback_speaking and (
+                    t - fallback_start_ts >= _FALLBACK_MAX_SPEECH_SEC
+                ):
                     logger.info(
                         "Fallback max speech reached, bytes=%s speech_sec=%.2f",
                         len(fallback_buffer),

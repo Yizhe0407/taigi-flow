@@ -372,7 +372,7 @@ function PlaygroundUI({
           active={isMicrophoneEnabled}
           subtitle={isMicrophoneEnabled ? "Mic is on" : "Mic is off"}
           trackAvailable={!!microphoneTrack}
-          track={microphoneTrack?.track}
+          track={microphoneTrack?.track as LocalAudioTrack | undefined}
           emptyText="Waiting for local mic track..."
         />
         <WaveformCard
