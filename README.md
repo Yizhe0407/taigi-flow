@@ -2,15 +2,15 @@
 
 > 大學專題：以台語為互動語言的即時語音 AI Agent，整合 LiveKit、自訓 Piper TTS 與台語 ASR 模型。
 
-## ✨ 核心特性
+## 核心特性
 
-- 🎙️ **原生台語互動**：使用 Qwen3-ASR / Breeze-ASR-26 + 自訓 Piper TTS
-- ⚡ **低延遲串流**：目標首次音訊延遲 < 1.2s
-- 🛑 **擬真打斷機制**：完整 Barge-in + AEC 實作
-- 🎭 **多人格管理**：透過後台熱更新 Agent 人格與發音字典
-- 📊 **可觀測**：每通對話的完整文字轉換鏈可追溯、可修正
+- **原生台語互動**：使用 Qwen3-ASR / Breeze-ASR-26 + 自訓 Piper TTS
+- **低延遲串流**：目標首次音訊延遲 < 1.2s
+- **擬真打斷機制**：完整 Barge-in + AEC 實作
+- **多人格管理**：透過後台熱更新 Agent 人格與發音字典
+- **可觀測**：每通對話的完整文字轉換鏈可追溯、可修正
 
-## 🏗️ 架構總覽
+## 架構總覽
 
 ```
 Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
@@ -23,7 +23,7 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 
 詳細架構見 [`docs/plan.md`](docs/plan.md#1-系統架構總覽)。
 
-## 📦 技術棧
+## 技術棧
 
 - **語音**：LiveKit (WebRTC)、Silero VAD、Qwen3-ASR、Piper TTS
 - **文字處理**：[HanloFlow](https://github.com/Yizhe0407/HanloFlow)、[Taibun](https://github.com/andreihar/taibun)
@@ -32,7 +32,7 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 - **資料**：PostgreSQL + pgvector、Prisma ORM
 - **部署**：Docker Compose
 
-## 🚀 快速開始
+## 快速開始
 
 ### 前置需求
 
@@ -125,7 +125,7 @@ uv run python -m worker.main dev
 - Host: `postgres`、Port: `5432`、DB: `agent_system`
 - User: `admin`、Password: 你的 `POSTGRES_PASSWORD`
 
-## 💬 文字對話 CLI（Phase 1）
+## 文字對話 CLI（Phase 1）
 
 不需語音，直接用文字跟 Agent 對話，驗證文字轉換鏈：
 
@@ -150,7 +150,7 @@ Assistant >
 - `Ctrl+C` 優雅退出
 - 每輪對話自動寫入 DB，可在 Cloudbeaver 查看
 
-## 🔄 更新 HanloFlow
+## 更新 HanloFlow
 
 HanloFlow 有新 commit push 後，在 worker 目錄執行：
 
@@ -159,7 +159,7 @@ cd worker
 uv sync --upgrade-package taigi-converter
 ```
 
-## 🔧 LLM 設定
+## LLM 設定
 
 Worker 預設使用 Ollama（OpenAI-compatible API）：
 
@@ -180,7 +180,7 @@ LLM_MODEL="llama3.2" \
   uv run python -m worker.cli --profile "公車站長"
 ```
 
-## 📁 專案結構
+## 專案結構
 
 ```
 .
@@ -212,7 +212,7 @@ LLM_MODEL="llama3.2" \
     └── cli.py                # 文字對話測試工具
 ```
 
-## 🗺️ 開發路線
+## 開發路線
 
 | Phase | 主題 | 狀態 |
 |-------|------|------|
@@ -227,6 +227,6 @@ LLM_MODEL="llama3.2" \
 
 完整細節見 [`docs/plan.md §9`](docs/plan.md#9-分階段實作路線) 與 [`tasks/`](tasks/)。
 
-## 📜 授權
+## 授權
 
 [待定]
