@@ -1,0 +1,2 @@
+pnpm -C "$(git rev-parse --show-toplevel)/web" typecheck
+cd "$(git rev-parse --show-toplevel)/worker" && uv run ruff check .
