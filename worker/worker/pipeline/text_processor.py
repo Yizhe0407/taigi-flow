@@ -73,6 +73,7 @@ class TextProcessor:
         self._profile_id = profile_id
         self._db_session = db_session
         self._dictionary: list[PronunciationEntry] = []
+        self._dict_loaded: bool = False
         self._dict_last_updated: datetime | None = None
         self._hanlo: Any = TaigiConverter()
         self._taibun: Any = Converter(system="Tailo", format="number")
@@ -85,6 +86,7 @@ class TextProcessor:
 
     async def load_dictionary(self) -> None:
         if self._db_session is None:
+            self._dict_loaded = True
             return
         result = await self._db_session.execute(self._dict_query())
         entries = list(result.scalars())
@@ -93,6 +95,7 @@ class TextProcessor:
         self._dict_last_updated = max(
             (e.updatedAt for e in entries), default=None
         )
+        self._dict_loaded = True
 
     async def reload_if_updated(self, session: AsyncSession) -> None:
         """Check DB max updatedAt; reload dictionary if newer entries exist."""
