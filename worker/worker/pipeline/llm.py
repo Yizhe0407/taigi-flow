@@ -64,11 +64,23 @@ class LLMClient:
             ) from e
 
         async def _gen() -> AsyncIterator[str]:
-            async with asyncio.timeout(timeout):
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta
-                    content = getattr(delta, "content", None)
-                    if isinstance(content, str):
-                        yield content
+            # Apply timeout per-token, not as a total deadline.
+            # A wall-clock timeout wrapping the whole generator counts TTS time
+            # (awaited between yields by the caller) against the budget, which
+            # causes spurious timeouts on long responses.
+            aiter = stream.__aiter__()
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(aiter.__anext__(), timeout=timeout)
+                except StopAsyncIteration:
+                    break
+                except TimeoutError as e:
+                    raise TimeoutError(
+                        f"LLM inter-token timeout after {timeout:.1f}s"
+                    ) from e
+                delta = chunk.choices[0].delta
+                content = getattr(delta, "content", None)
+                if isinstance(content, str):
+                    yield content
 
         return _gen()

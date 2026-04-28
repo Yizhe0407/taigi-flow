@@ -12,8 +12,8 @@
 | Phase | 檔案 | 週 | 狀態 |
 |-------|------|----|------|
 | 0 | [phase-0-infrastructure.md](phase-0-infrastructure.md) | W1 | ✅ 完成 |
-| 1 | [phase-1-text-pipeline.md](phase-1-text-pipeline.md) | W2 | ⬜ 未開始 |
-| 2 | [phase-2-voice-layer.md](phase-2-voice-layer.md) | W3 | ⬜ 未開始 |
+| 1 | [phase-1-text-pipeline.md](phase-1-text-pipeline.md) | W2 | ✅ 完成 |
+| 2 | [phase-2-voice-layer.md](phase-2-voice-layer.md) | W3 | ✅ 完成 |
 | 3 | [phase-3-integration.md](phase-3-integration.md) | W4 | ⬜ 未開始 |
 | 4 | [phase-4-barge-in.md](phase-4-barge-in.md) | W5 | ⬜ 未開始 |
 | 5 | [phase-5-admin-panel.md](phase-5-admin-panel.md) | W6 | ⬜ 未開始 |
