@@ -37,10 +37,10 @@
 
 ### P3-01：LatencyTimer 輔助類
 
-- [ ] **依賴**：無
-- [ ] **檔案**：`worker/observability/metrics.py`、`worker/tests/test_metrics.py`
-- [ ] **參照**：`docs/plan.md §6.1`
-- [ ] **輸入規格**：
+- [x] **依賴**：無
+- [x] **檔案**：`worker/observability/metrics.py`、`worker/tests/test_metrics.py`
+- [x] **參照**：`docs/plan.md §6.1`
+- [x] **輸入規格**：
   ```python
   from dataclasses import dataclass, field
   from typing import Literal
@@ -76,21 +76,21 @@
           """回傳符合 InteractionLogRepository.log_turn(latencies=...) 格式的 dict。"""
       def __contains__(self, stage: Stage) -> bool: ...
   ```
-- [ ] **實作細節**：
+- [x] **實作細節**：
   - 內部用 `time.perf_counter()` 取 monotonic 秒數，寫入時轉為毫秒整數
   - `mark()` 只記第一次呼叫；重複 mark 會 log warning 但覆寫舊值（方便 retry 情境）
   - `as_dict()` 只回傳**已 mark** 的 key，未記錄的 stage 不出現（DB 欄位 nullable，缺值表示未到達該階段）
-- [ ] **測試必須涵蓋**（至少 6 個 case）：
+- [x] **測試必須涵蓋**（至少 6 個 case）：
   - `start()` 後立刻 `finalize()`：`total` 應為接近 0 的整數
   - 依序 mark 四個 stage：`as_dict()` 回傳 4 個 key，數值單調遞增
   - 只 mark 前兩個 stage：`as_dict()` 只含 `asr_end` 與 `llm_first_tok`
   - 重複 mark 同一個 stage：第二次值覆寫第一次，log warning
   - `"asr_end" in timer` 判斷正確
   - 用 `monkeypatch.setattr(time, "perf_counter", ...)` 驗證時間計算精確（**不要新增 `freezegun` 依賴**）
-- [ ] **驗收**：
+- [x] **驗收**：
   - `uv run pytest worker/tests/test_metrics.py -v` 全綠
   - `uv run pyright worker/observability/metrics.py` strict 通過
-- [ ] **Commit**：`feat(worker): add latency timer for per-turn instrumentation`
+- [x] **Commit**：`feat(worker): add latency timer for per-turn instrumentation` (42b3bb4)
 
 ---
 
