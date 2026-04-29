@@ -69,7 +69,7 @@ class PipelineRunner:
         self._tts_chunk_timeout = (
             tts_chunk_timeout
             if tts_chunk_timeout is not None
-            else _parse_timeout("TTS_CHUNK_TIMEOUT", 2.0)
+            else _parse_timeout("TTS_CHUNK_TIMEOUT", 30.0)
         )
 
     async def speak_taibun(
