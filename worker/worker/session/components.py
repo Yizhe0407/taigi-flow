@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from livekit import rtc
 
+from ..audio.fallback import FallbackPlayer
 from ..db.repositories import AgentProfileRepository, InteractionLogRepository
 from ..db.session import async_session_factory
 from ..pipeline.asr.breeze import BreezeASR26
@@ -38,6 +39,7 @@ class AgentComponents:
     memory: SlidingWindowMemory
     text_processor: TextProcessor
     audio_source: rtc.AudioSource
+    fallback: FallbackPlayer
     log_repo: InteractionLogRepository | None
     session_id: str
     agent_profile_id: str | None
@@ -128,6 +130,10 @@ async def build_components(livekit_room: str) -> AgentComponents:
         text_processor = TextProcessor(profile_id=profile_id, db_session=None)
         await text_processor.reload_if_updated(db)
 
+    fallback = FallbackPlayer(audio_source)
+    if tts is not None:
+        await fallback.pregenerate(tts, text_processor)
+
     log_repo: InteractionLogRepository | None
     session_id: str
     if profile_id is not None:
@@ -148,6 +154,7 @@ async def build_components(livekit_room: str) -> AgentComponents:
         memory=memory,
         text_processor=text_processor,
         audio_source=audio_source,
+        fallback=fallback,
         log_repo=log_repo,
         session_id=session_id,
         agent_profile_id=profile_id,

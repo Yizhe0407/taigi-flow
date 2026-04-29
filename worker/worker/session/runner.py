@@ -12,6 +12,7 @@ from ..pipeline.splitter import SmartSplitter
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
+    from ..audio.fallback import FallbackPlayer
     from ..db.repositories import InteractionLogRepository
     from .components import AgentComponents
 
@@ -26,6 +27,7 @@ class PipelineRunner:
         self._memory = components.memory
         self._text_processor = components.text_processor
         self._audio_source = components.audio_source
+        self._fallback: FallbackPlayer = components.fallback
         self._log_repo: InteractionLogRepository | None = components.log_repo
         self._session_id = components.session_id
         self._pipeline_busy = False
@@ -156,9 +158,7 @@ class PipelineRunner:
 
             if not user_text.strip():
                 logger.info("[%s][asr] returned empty text", trace_id)
-                await self.speak_notice(
-                    "歹勢，我這馬聽無清楚，你閣講一遍好無？", trace_id
-                )
+                await self._fallback.play("asr_timeout")
                 return
 
             logger.info("[%s][asr] user_text=%s", trace_id, user_text)
@@ -182,7 +182,7 @@ class PipelineRunner:
             else:
                 logger.exception("[%s][pipeline] llm/text/tts failed: %r", trace_id, e)
             error_flag = "unknown"
-            await self.speak_notice("歹勢，這馬無法回應，請稍後閣試。", trace_id)
+            await self._fallback.play("llm_error")
         finally:
             timer.finalize()
             logger.info(
@@ -239,9 +239,7 @@ class PipelineRunner:
                 (time.perf_counter() - asr_start) * 1000,
                 e,
             )
-            await self.speak_notice(
-                "歹勢，語音辨識服務目前無法連線，請稍後再試。", trace_id
-            )
+            await self._fallback.play("asr_timeout")
             return None
 
     async def _run_llm_tts(
