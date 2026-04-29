@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 # prons_dict (prons.msgpack) = char → list[str]; used for variant lookups
 # Both must be patched before any Converter is created.
 _TAIBUN_PATCHES: dict[str, str] = {
+    # Pronouns / particles missing from taibun word_dict
     "妳": "lí",
     "您": "lín",
     "她": "i",
@@ -48,6 +49,9 @@ _TAIBUN_PATCHES: dict[str, str] = {
     "儂": "lâng",
     "怹": "in",
     "儕": "tsê",
+    # Body parts — in prons_dict but missing from word_dict, or absent entirely
+    "嘴": "tshuì",   # mouth; already in prons_dict, just absent from word_dict
+    "踝": "bûn",     # ankle bone (腳踝 kha-bûn)
 }
 for _ch, _rom in _TAIBUN_PATCHES.items():
     word_dict: dict[str, str] = _taibun_module.word_dict  # type: ignore[assignment]
