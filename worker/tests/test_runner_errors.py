@@ -1,4 +1,5 @@
 """Tests for PipelineRunner timeout and error-classification paths (P3-05)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -45,7 +46,6 @@ def _make_runner(
     fallback: MagicMock | None = None,
     asr_timeout: float = 10.0,
     llm_total_timeout: float = 30.0,
-    tts_chunk_timeout: float = 10.0,
 ) -> tuple[PipelineRunner, MagicMock, MagicMock]:
     """Returns (runner, fallback_mock, log_repo_mock)."""
     fb = fallback or _mock_fallback()
@@ -69,7 +69,6 @@ def _make_runner(
         components,
         asr_timeout=asr_timeout,
         llm_total_timeout=llm_total_timeout,
-        tts_chunk_timeout=tts_chunk_timeout,
     )
     return runner, fb, log_repo  # type: ignore[return-value]
 
@@ -144,9 +143,7 @@ async def test_llm_first_token_timeout_sets_flag_and_plays_fallback() -> None:
 
     llm = MagicMock()
     llm.stream = _timeout_stream
-    runner, fb, log_repo = _make_runner(
-        asr=_asr_returning("hello"), llm=llm
-    )
+    runner, fb, log_repo = _make_runner(asr=_asr_returning("hello"), llm=llm)
 
     await runner.process_utterance(_AUDIO)
 
@@ -197,36 +194,23 @@ async def test_llm_total_timeout_after_first_token_sets_partial_flag() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tts_chunk_timeout_skips_sentence_and_continues() -> None:
-    """First sentence TTS hangs → skipped. Second sentence succeeds → audio plays."""
-    call_count = 0
+async def test_tts_exception_triggers_llm_error_fallback() -> None:
+    """TTS synthesis error propagates up and plays llm_error fallback."""
 
-    async def _sometimes_hanging_synth(text: str):  # type: ignore[no-untyped-def]
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            await asyncio.sleep(999)  # first sentence hangs
-            return
-        yield b"\x00" * 640  # second sentence succeeds
+    async def _broken_synth(text: str):  # type: ignore[no-untyped-def]
+        raise RuntimeError("Piper synthesis failed")
+        yield  # make it an async generator
 
     tts = MagicMock()
-    tts.synthesize = _sometimes_hanging_synth
-
-    # Use Chinese strong break (。) so SmartSplitter emits two separate sentences
-    llm = _llm_yielding("第一句。", "第二句。")
-
-    runner, fb, _ = _make_runner(
+    tts.synthesize = _broken_synth
+    llm = _llm_yielding("回應。")
+    runner, fb, log_repo = _make_runner(
         asr=_asr_returning("question"),
         llm=llm,
         tts=tts,
-        tts_chunk_timeout=0.05,
     )
-    # Override text_processor to return non-empty taibun so speak_taibun is called
-    runner._text_processor = _mock_text_processor(taibun="ta")  # type: ignore[attr-defined]  # pyright: ignore[reportPrivateUsage]
 
     await runner.process_utterance(_AUDIO)
 
-    # No error fallback played (TTS chunk timeout is not a fatal error)
-    fb.play.assert_not_awaited()
-    # Second sentence produced audio
-    assert runner._audio_source.capture_frame.call_count >= 1  # type: ignore[attr-defined]  # pyright: ignore[reportPrivateUsage]
+    fb.play.assert_awaited_once_with("llm_error")
+    assert log_repo.log_turn.call_args.kwargs["error_flag"] == "llm_api_error"

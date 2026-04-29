@@ -42,7 +42,6 @@ class PipelineRunner:
         components: AgentComponents,
         asr_timeout: float | None = None,
         llm_total_timeout: float | None = None,
-        tts_chunk_timeout: float | None = None,
     ) -> None:
         self._tts = components.tts
         self._asr = components.asr
@@ -66,11 +65,6 @@ class PipelineRunner:
             if llm_total_timeout is not None
             else _parse_timeout("LLM_TOTAL_TIMEOUT", 15.0)
         )
-        self._tts_chunk_timeout = (
-            tts_chunk_timeout
-            if tts_chunk_timeout is not None
-            else _parse_timeout("TTS_CHUNK_TIMEOUT", 30.0)
-        )
 
     async def speak_taibun(
         self,
@@ -90,19 +84,7 @@ class PipelineRunner:
             chunk_size = 640
             leftover = b""
             first_frame = True
-            aiter = self._tts.synthesize(taibun).__aiter__()
-            while True:
-                try:
-                    chunk = await asyncio.wait_for(
-                        aiter.__anext__(), timeout=self._tts_chunk_timeout
-                    )
-                except StopAsyncIteration:
-                    break
-                except TimeoutError:
-                    logger.warning(
-                        "[%s][tts] chunk timeout, skipping sentence", trace_id
-                    )
-                    return
+            async for chunk in self._tts.synthesize(taibun):
                 chunk_count += 1
                 pcm_bytes += len(chunk)
                 data = leftover + chunk
