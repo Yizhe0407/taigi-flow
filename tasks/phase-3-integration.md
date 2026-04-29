@@ -225,11 +225,11 @@
 
 ### P3-04：Runner 整合 Fallback 播放
 
-- [ ] **依賴**：P3-03
-- [ ] **檔案**：
+- [x] **依賴**：P3-03
+- [x] **檔案**：
   - `worker/session/components.py`（擴充：把 `FallbackPlayer` 加進 `AgentComponents`）
   - `worker/session/runner.py`（把現有 `speak_notice` 即時合成路徑替換為 fallback player）
-- [ ] **變更點**：
+- [x] **變更點**：
   - `AgentComponents` 新增欄位 `fallback: FallbackPlayer`
   - `build_components`：
     ```python
@@ -247,11 +247,11 @@
       | `"歹勢，我這馬聽無清楚，你閣講一遍好無？"`（ASR empty/timeout） | `asr_timeout` |
       | `"歹勢，語音辨識服務目前無法連線..."` | `asr_timeout` |
       | `"歹勢，這馬無法回應，請稍後閣試。"` | `llm_error` |
-- [ ] **驗收**：
+- [x] **驗收**：
   - 手動測試：對 agent 沉默 → 聽到 `asr_timeout` 台語音訊
   - 觀察啟動 log：`fallback pregeneration complete kinds=5`，且第二次對話觸發 fallback 時**不再**有 `[tts] done` log（證實走預錄路徑）
   - DB log：對應輪次 `errorFlag` 非 NULL
-- [ ] **Commit**：`refactor(worker): route error paths through fallback player`
+- [x] **Commit**：`refactor(worker): route error paths through fallback player` (112f95d)
 
 ---
 
