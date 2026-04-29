@@ -96,13 +96,13 @@
 
 ### P3-02：Runner 整合延遲量測與 InteractionLog 寫入
 
-- [ ] **依賴**：P3-01
-- [ ] **檔案**：
+- [x] **依賴**：P3-01
+- [x] **檔案**：
   - `worker/session/components.py`（擴充）
   - `worker/session/runner.py`（擴充）
   - `worker/main.py`（串接）
-- [ ] **參照**：`docs/plan.md §6.1`、`worker/db/repositories.py::InteractionLogRepository.log_turn`
-- [ ] **`AgentComponents` 擴充**：
+- [x] **參照**：`docs/plan.md §6.1`、`worker/db/repositories.py::InteractionLogRepository.log_turn`
+- [x] **`AgentComponents` 擴充**：
   ```python
   @dataclasses.dataclass
   class AgentComponents:
@@ -117,13 +117,13 @@
       session_id: str            # build_components 時呼叫 log_repo.create_session() 取得
       agent_profile_id: str | None  # 給 reload_if_updated / log 用
   ```
-- [ ] **`build_components()` 變更**：
+- [x] **`build_components()` 變更**：
   - 簽名改為 `async def build_components(livekit_room: str) -> AgentComponents`
   - room name 由 `entrypoint(ctx)` 傳入：`await build_components(ctx.room.name)`（**不要新增 `LIVEKIT_ROOM` env**，real source 是 JobContext）
   - 建立 `log_repo = InteractionLogRepository(async_session_factory)`
   - 取得 `profile_id` 後：`session_id = await log_repo.create_session(profile_id, livekit_room)`
   - 若 `profile_id` 為 `None`（profile 不存在，走現有 `_FALLBACK_SYSTEM_PROMPT` 路徑）：**略過 DB 寫入**並 log warning，讓語音仍可測試；存 `log_repo = None` sentinel + `session_id = ""`
-- [ ] **`PipelineRunner` 變更**：
+- [x] **`PipelineRunner` 變更**：
   - 建構子接受 `log_repo` 與 `session_id`（可為 `None` / 空字串時停用）
   - 新增 instance var `_turn_index: int = 0`
   - `process_utterance` 流程：
@@ -147,11 +147,11 @@
        )
        ```
     6. DB 寫入失敗**不可拖垮對話**：整段包 `try/except`，log error 後吞掉
-- [ ] **callback 傳遞方式**：
+- [x] **callback 傳遞方式**：
   - 用 `Callable[[], None]` 由 caller 注入，不把 `timer` 物件下傳到 tts/llm（避免耦合）
   - `_run_llm_tts(on_first_token: Callable[[], None])`
   - `speak_taibun(on_first_audio: Callable[[], None])` 內用 `if not _first_audio_fired: cb(); _first_audio_fired = True`
-- [ ] **驗收**：
+- [x] **驗收**：
   - 與 Playground 對話一輪，觀察 DB：
     ```sql
     SELECT "turnIndex", "latencyAsrEnd", "latencyLlmFirstTok",
@@ -162,7 +162,7 @@
     四個 latency 欄位**皆非 NULL** 且單調遞增，`latencyTotal` 接近 sum
   - Playground 手動測試：把 DB 停掉（`docker compose stop postgres`）後仍能對話，只是沒 log
   - `uv run pyright worker/session/` strict 通過
-- [ ] **Commit**：`feat(worker): wire latency metrics and interaction log to voice pipeline`
+- [x] **Commit**：`feat(worker): wire latency metrics and interaction log to voice pipeline` (4c27ebc)
 
 ---
 
