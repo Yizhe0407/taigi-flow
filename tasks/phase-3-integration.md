@@ -168,10 +168,10 @@
 
 ### P3-03：Fallback 音訊預生成
 
-- [ ] **依賴**：P2-01
-- [ ] **檔案**：`worker/audio/fallback.py`、`worker/tests/test_fallback.py`
-- [ ] **參照**：`docs/plan.md §5.1`
-- [ ] **輸入規格**：
+- [x] **依賴**：P2-01
+- [x] **檔案**：`worker/audio/fallback.py`、`worker/tests/test_fallback.py`
+- [x] **參照**：`docs/plan.md §5.1`
+- [x] **輸入規格**：
   ```python
   from typing import Literal
 
@@ -204,22 +204,22 @@
       def is_ready(self) -> bool:
           """True 表示 5 個 kind 皆成功預生成。"""
   ```
-- [ ] **實作細節**：
+- [x] **實作細節**：
   - 文字須經 `text_processor.process()` 取得 taibun，再交給 `tts.synthesize()`
   - 20ms frame 切分邏輯可抽共用 helper（參考 `PipelineRunner.speak_taibun` 現有作法），**不重複貼整段**
   - 預生成失敗（單一 kind）不影響其他 kind，失敗的 kind 於 `play()` 被呼叫時只 log error
   - 所有 PCM 保留在記憶體（5 段 × ~2 秒 × 16kHz × 2byte ≈ 320KB，不需磁碟快取）
-- [ ] **測試必須涵蓋**：
+- [x] **測試必須涵蓋**：
   - `pregenerate` 用 fake TTS（回傳固定 bytes）驗證 5 個 key 都存在於 `_audios`
   - `play` 呼叫後 `audio_source.capture_frame` 被呼叫次數 = PCM 長度 / 640
   - 未預生成的 kind 被 `play` 時 no-op，log error
   - `is_ready` 在 5 個都成功時為 True，任一失敗為 False
   - Piper synthesize 丟例外時，不影響其他 kind 預生成
-- [ ] **驗收**：
+- [x] **驗收**：
   - `uv run pytest worker/tests/test_fallback.py -v` 全綠
   - `uv run pyright worker/audio/fallback.py` strict 通過
   - 整合後啟動 Worker log 可見 `fallback pregeneration complete kinds=5`
-- [ ] **Commit**：`feat(worker): add fallback audio pregeneration`
+- [x] **Commit**：`feat(worker): add fallback audio pregeneration` (a1df52a)
 
 ---
 
