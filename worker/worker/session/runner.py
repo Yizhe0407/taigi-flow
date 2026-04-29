@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import time
 from typing import TYPE_CHECKING
 
@@ -19,8 +21,29 @@ if TYPE_CHECKING:
 logger = logging.getLogger("worker.session.runner")
 
 
+def _parse_timeout(env_key: str, default: float) -> float:
+    raw = os.getenv(env_key)
+    if raw is None:
+        return default
+    try:
+        v = float(raw)
+        if v > 0:
+            return v
+        logger.warning("Non-positive %s=%s, using default %.1fs", env_key, raw, default)
+        return default
+    except ValueError:
+        logger.warning("Invalid %s=%s, using default %.1fs", env_key, raw, default)
+        return default
+
+
 class PipelineRunner:
-    def __init__(self, components: AgentComponents) -> None:
+    def __init__(
+        self,
+        components: AgentComponents,
+        asr_timeout: float | None = None,
+        llm_total_timeout: float | None = None,
+        tts_chunk_timeout: float | None = None,
+    ) -> None:
         self._tts = components.tts
         self._asr = components.asr
         self._llm = components.llm
@@ -33,6 +56,21 @@ class PipelineRunner:
         self._pipeline_busy = False
         self._utterance_seq = 0
         self._turn_index = 0
+        self._asr_timeout = (
+            asr_timeout
+            if asr_timeout is not None
+            else _parse_timeout("ASR_TIMEOUT", 12.0)
+        )
+        self._llm_total_timeout = (
+            llm_total_timeout
+            if llm_total_timeout is not None
+            else _parse_timeout("LLM_TOTAL_TIMEOUT", 15.0)
+        )
+        self._tts_chunk_timeout = (
+            tts_chunk_timeout
+            if tts_chunk_timeout is not None
+            else _parse_timeout("TTS_CHUNK_TIMEOUT", 2.0)
+        )
 
     async def speak_taibun(
         self,
@@ -49,11 +87,22 @@ class PipelineRunner:
             chunk_count = 0
             pcm_bytes = 0
             tts_start = time.perf_counter()
-            # 20ms frames: 320 samples × 2 bytes = 640 bytes at 16kHz 16-bit mono
             chunk_size = 640
             leftover = b""
             first_frame = True
-            async for chunk in self._tts.synthesize(taibun):
+            aiter = self._tts.synthesize(taibun).__aiter__()
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(
+                        aiter.__anext__(), timeout=self._tts_chunk_timeout
+                    )
+                except StopAsyncIteration:
+                    break
+                except TimeoutError:
+                    logger.warning(
+                        "[%s][tts] chunk timeout, skipping sentence", trace_id
+                    )
+                    return
                 chunk_count += 1
                 pcm_bytes += len(chunk)
                 data = leftover + chunk
@@ -104,9 +153,7 @@ class PipelineRunner:
                 await self.speak_taibun(res.taibun, trace_id)
             except Exception as e:
                 logger.error(
-                    "[%s][notice] tts failed, user will hear silence: %s",
-                    trace_id,
-                    e,
+                    "[%s][notice] tts failed, user will hear silence: %s", trace_id, e
                 )
 
     async def process_utterance(
@@ -139,7 +186,6 @@ class PipelineRunner:
         last_taibun: str = ""
         error_flag: str | None = None
 
-        # self-disabling callback: fires exactly once for the whole utterance
         _first_audio_fired = False
 
         def _on_first_audio() -> None:
@@ -149,15 +195,30 @@ class PipelineRunner:
                 timer.mark("first_audio")
 
         try:
-            asr_result = await self._run_asr(audio_bytes, trace_id)
-            if asr_result is None:
-                # _run_asr already played a notice on API errors
+            # ── Stage 1: ASR ─────────────────────────────────────────────────
+            try:
+                async with asyncio.timeout(self._asr_timeout):
+                    user_text = await self._run_asr(audio_bytes, trace_id)
+            except TimeoutError:
+                logger.error(
+                    "[%s][asr] timeout after %.1fs", trace_id, self._asr_timeout
+                )
+                error_flag = "asr_timeout"
+                await self._fallback.play("asr_timeout")
                 return
-            user_text = asr_result
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("[%s][asr] api error: %s", trace_id, e)
+                error_flag = "asr_api_error"
+                await self._fallback.play("asr_timeout")
+                return
+
             timer.mark("asr_end")
 
             if not user_text.strip():
                 logger.info("[%s][asr] returned empty text", trace_id)
+                error_flag = "asr_timeout"
                 await self._fallback.play("asr_timeout")
                 return
 
@@ -167,22 +228,34 @@ class PipelineRunner:
             def _on_first_token() -> None:
                 timer.mark("llm_first_tok")
 
+            # ── Stage 2: LLM + TTS ───────────────────────────────────────────
             try:
-                full_response, last_hanlo, last_taibun = await self._run_llm_tts(
+                (
+                    full_response,
+                    last_hanlo,
+                    last_taibun,
+                    partial_flag,
+                ) = await self._run_llm_tts(
                     trace_id,
                     on_first_token=_on_first_token,
                     on_first_audio=_on_first_audio,
                 )
-            except Exception:
+                if partial_flag is not None:
+                    error_flag = partial_flag
+            except TimeoutError as e:
+                logger.error("[%s][llm] first token timeout: %s", trace_id, e)
+                error_flag = "llm_timeout"
+                await self._fallback.play("llm_error")
+                self._memory.pop_last()
+            except asyncio.CancelledError:
                 self._memory.pop_last()
                 raise
-        except Exception as e:
-            if isinstance(e, TimeoutError):
-                logger.error("[%s][pipeline] llm/text/tts timeout: %s", trace_id, e)
-            else:
-                logger.exception("[%s][pipeline] llm/text/tts failed: %r", trace_id, e)
-            error_flag = "unknown"
-            await self._fallback.play("llm_error")
+            except Exception as e:
+                logger.exception("[%s][llm] api error: %r", trace_id, e)
+                error_flag = "llm_api_error"
+                await self._fallback.play("llm_error")
+                self._memory.pop_last()
+
         finally:
             timer.finalize()
             logger.info(
@@ -212,7 +285,7 @@ class PipelineRunner:
                     )
             self._pipeline_busy = False
 
-    async def _run_asr(self, audio_bytes: bytes, trace_id: str) -> str | None:
+    async def _run_asr(self, audio_bytes: bytes, trace_id: str) -> str:
         async def _audio_gen() -> AsyncIterator[bytes]:
             yield audio_bytes
 
@@ -232,6 +305,8 @@ class PipelineRunner:
                 (time.perf_counter() - asr_start) * 1000,
             )
             return user_text
+        except (TimeoutError, asyncio.CancelledError):
+            raise
         except Exception as e:
             logger.error(
                 "[%s][asr] failed cost_ms=%.1f error=%s",
@@ -239,15 +314,14 @@ class PipelineRunner:
                 (time.perf_counter() - asr_start) * 1000,
                 e,
             )
-            await self._fallback.play("asr_timeout")
-            return None
+            raise
 
     async def _run_llm_tts(
         self,
         trace_id: str,
         on_first_token: Callable[[], None] | None = None,
         on_first_audio: Callable[[], None] | None = None,
-    ) -> tuple[str, str, str]:
+    ) -> tuple[str, str, str, str | None]:
         splitter = SmartSplitter()
         llm_start = time.perf_counter()
         full_response = ""
@@ -255,21 +329,39 @@ class PipelineRunner:
         token_count = 0
         last_hanlo = ""
         last_taibun = ""
+        partial_flag: str | None = None
 
-        async for token in await self._llm.stream(messages=self._memory.to_messages()):
-            token_count += 1
+        try:
+            async with asyncio.timeout(self._llm_total_timeout):
+                async for token in await self._llm.stream(
+                    messages=self._memory.to_messages()
+                ):
+                    token_count += 1
+                    if first_token_ms is None:
+                        first_token_ms = (time.perf_counter() - llm_start) * 1000
+                        logger.info(
+                            "[%s][llm] first_token_ms=%.1f", trace_id, first_token_ms
+                        )
+                        if on_first_token is not None:
+                            on_first_token()
+                    full_response += token
+                    for sentence in splitter.feed(token):
+                        hanlo, taibun = await self._speak_sentence(
+                            sentence, trace_id, on_first_audio
+                        )
+                        if hanlo or taibun:
+                            last_hanlo, last_taibun = hanlo, taibun
+        except TimeoutError:
             if first_token_ms is None:
-                first_token_ms = (time.perf_counter() - llm_start) * 1000
-                logger.info("[%s][llm] first_token_ms=%.1f", trace_id, first_token_ms)
-                if on_first_token is not None:
-                    on_first_token()
-            full_response += token
-            for sentence in splitter.feed(token):
-                hanlo, taibun = await self._speak_sentence(
-                    sentence, trace_id, on_first_audio
-                )
-                if hanlo or taibun:
-                    last_hanlo, last_taibun = hanlo, taibun
+                # No token arrived before deadline → first-token timeout; propagate
+                raise
+            logger.warning(
+                "[%s][llm] total timeout after %.1fs, partial len=%s",
+                trace_id,
+                self._llm_total_timeout,
+                len(full_response),
+            )
+            partial_flag = "llm_partial"
 
         rest = splitter.flush()
         if rest:
@@ -277,7 +369,8 @@ class PipelineRunner:
             if hanlo or taibun:
                 last_hanlo, last_taibun = hanlo, taibun
 
-        self._memory.add("assistant", full_response)
+        if full_response:
+            self._memory.add("assistant", full_response)
         logger.info(
             "[%s][llm] done tokens=%s response_len=%s cost_ms=%.1f",
             trace_id,
@@ -285,7 +378,7 @@ class PipelineRunner:
             len(full_response),
             (time.perf_counter() - llm_start) * 1000,
         )
-        return full_response, last_hanlo, last_taibun
+        return full_response, last_hanlo, last_taibun, partial_flag
 
     async def _speak_sentence(
         self,

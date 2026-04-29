@@ -9,7 +9,7 @@ from openai import AsyncOpenAI
 logger = logging.getLogger(__name__)
 
 
-def parse_first_token_timeout(raw: str | None, default: float = 15.0) -> float:
+def parse_first_token_timeout(raw: str | None, default: float = 5.0) -> float:
     if raw is None:
         return default
     try:
