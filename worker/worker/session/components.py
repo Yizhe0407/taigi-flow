@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from livekit import rtc
 
-from ..db.repositories import AgentProfileRepository
+from ..db.repositories import AgentProfileRepository, InteractionLogRepository
 from ..db.session import async_session_factory
 from ..pipeline.asr.breeze import BreezeASR26
 from ..pipeline.asr.qwen3 import Qwen3ASR
@@ -38,6 +38,9 @@ class AgentComponents:
     memory: SlidingWindowMemory
     text_processor: TextProcessor
     audio_source: rtc.AudioSource
+    log_repo: InteractionLogRepository | None
+    session_id: str
+    agent_profile_id: str | None
 
 
 def _build_tts() -> PiperTTS | None:
@@ -98,7 +101,7 @@ async def _load_profile(db: AsyncSession, profile_name: str) -> tuple[str, str |
     return profile.systemPrompt, profile.id
 
 
-async def build_components() -> AgentComponents:
+async def build_components(livekit_room: str) -> AgentComponents:
     audio_source = rtc.AudioSource(16000, 1)
     tts = _build_tts()
 
@@ -125,6 +128,19 @@ async def build_components() -> AgentComponents:
         text_processor = TextProcessor(profile_id=profile_id, db_session=None)
         await text_processor.reload_if_updated(db)
 
+    log_repo: InteractionLogRepository | None
+    session_id: str
+    if profile_id is not None:
+        log_repo = InteractionLogRepository(async_session_factory)
+        session_id = await log_repo.create_session(profile_id, livekit_room)
+        logger.info("Interaction logging enabled: session_id=%s", session_id)
+    else:
+        logger.warning(
+            "Profile not found; interaction logging disabled for this session."
+        )
+        log_repo = None
+        session_id = ""
+
     return AgentComponents(
         tts=tts,
         asr=asr,
@@ -132,4 +148,7 @@ async def build_components() -> AgentComponents:
         memory=memory,
         text_processor=text_processor,
         audio_source=audio_source,
+        log_repo=log_repo,
+        session_id=session_id,
+        agent_profile_id=profile_id,
     )

@@ -23,7 +23,7 @@ async def request_fnc(req: JobRequest) -> None:
 async def entrypoint(ctx: JobContext) -> None:
     logger.info("Agent starting...")
 
-    components = await build_components()
+    components = await build_components(livekit_room=ctx.room.name)
 
     track = rtc.LocalAudioTrack.create_audio_track("agent-mic", components.audio_source)
     options = rtc.TrackPublishOptions(source=rtc.TrackSource.SOURCE_MICROPHONE)
