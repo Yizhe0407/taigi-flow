@@ -312,7 +312,11 @@ class PipelineRunner:
         last_hanlo = ""
         last_taibun = ""
         partial_flag: str | None = None
+        # Sentences collected during LLM streaming; synthesized after the
+        # LLM timeout context exits so TTS is never interrupted mid-synthesis.
+        pending_sentences: list[str] = []
 
+        # ── Phase 1: collect tokens (LLM total timeout guards this block only) ──
         try:
             async with asyncio.timeout(self._llm_total_timeout):
                 async for token in await self._llm.stream(
@@ -327,12 +331,7 @@ class PipelineRunner:
                         if on_first_token is not None:
                             on_first_token()
                     full_response += token
-                    for sentence in splitter.feed(token):
-                        hanlo, taibun = await self._speak_sentence(
-                            sentence, trace_id, on_first_audio
-                        )
-                        if hanlo or taibun:
-                            last_hanlo, last_taibun = hanlo, taibun
+                    pending_sentences.extend(splitter.feed(token))
         except TimeoutError:
             if first_token_ms is None:
                 # No token arrived before deadline → first-token timeout; propagate
@@ -347,7 +346,13 @@ class PipelineRunner:
 
         rest = splitter.flush()
         if rest:
-            hanlo, taibun = await self._speak_sentence(rest, trace_id, on_first_audio)
+            pending_sentences.append(rest)
+
+        # ── Phase 2: synthesize all sentences (no timeout — TTS must complete) ──
+        for sentence in pending_sentences:
+            hanlo, taibun = await self._speak_sentence(
+                sentence, trace_id, on_first_audio
+            )
             if hanlo or taibun:
                 last_hanlo, last_taibun = hanlo, taibun
 
