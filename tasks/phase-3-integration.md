@@ -257,12 +257,12 @@
 
 ### P3-05：超時與錯誤分類處理
 
-- [ ] **依賴**：P3-02、P3-04
-- [ ] **檔案**：
+- [x] **依賴**：P3-02、P3-04
+- [x] **檔案**：
   - `worker/session/runner.py`（主要變更）
   - `worker/pipeline/llm.py`（若需要把首 token 預設改 5s，或新增 `LLM_TOTAL_TIMEOUT`）
-- [ ] **參照**：`docs/plan.md §5.2 超時門檻表`、`§5.3 try/except 範例`
-- [ ] **需落實的超時表**（以 `asyncio.wait_for` / `asyncio.timeout` 包覆，env 可覆寫，**單位統一為秒、float**，與既有 `LLM_FIRST_TOKEN_TIMEOUT` 對齊）：
+- [x] **參照**：`docs/plan.md §5.2 超時門檻表`、`§5.3 try/except 範例`
+- [x] **需落實的超時表**（以 `asyncio.wait_for` / `asyncio.timeout` 包覆，env 可覆寫，**單位統一為秒、float**，與既有 `LLM_FIRST_TOKEN_TIMEOUT` 對齊）：
   | 階段 | 門檻（預設） | env 覆寫 | 逾時動作 | `error_flag` |
   |------|-----------|--------|---------|------------|
   | ASR 整體 | 12s hard cap | `ASR_TIMEOUT` | 播 `asr_timeout`，結束本輪 | `asr_timeout` |
@@ -271,12 +271,12 @@
   | TTS 單 chunk | 2s | `TTS_CHUNK_TIMEOUT` | 中止本句，跳下一句 | `tts_fail`（僅當整輪無音訊產出才記） |
   - **註 1**：ASR partial 3s 無更新門檻（plan §5.2）在 batch 模式下無意義（現 ASR 是 one-shot），只保留整體 cap
   - **註 2**：`LLMClient` 既有預設 15s（見 `worker/pipeline/llm.py:34`），須在本 task 內把預設改 5s 並更新對應測試；env 名稱不變，避免再分裂
-- [ ] **error_flag 分類**（寫入 `InteractionLog.errorFlag`）：
+- [x] **error_flag 分類**（寫入 `InteractionLog.errorFlag`）：
   - `asr_timeout` / `asr_api_error`
   - `llm_timeout` / `llm_api_error` / `llm_partial`
   - `tts_fail`
   - `unknown` — 未歸類例外（捕獲後 re-raise 前記錄）
-- [ ] **實作骨架**（示意，參照 plan §5.3）：
+- [x] **實作骨架**（示意，參照 plan §5.3）：
   ```python
   try:
       async with asyncio.timeout(llm_first_tok_s):
@@ -293,7 +293,7 @@
   except asyncio.CancelledError:
       raise  # barge-in 用，Phase 4 才啟用
   ```
-- [ ] **測試必須涵蓋**（`worker/tests/test_runner_errors.py`）：
+- [x] **測試必須涵蓋**（`worker/tests/test_runner_errors.py`）：
   - 用 fake LLM 回傳 generator 模擬：
     - 立刻 raise `TimeoutError` → `error_flag == "llm_timeout"`，fallback.play 被呼叫 1 次帶 `llm_error`
     - 立刻 raise `LLMAPIError` → `error_flag == "llm_api_error"`
@@ -302,15 +302,15 @@
     - stream 永不 yield → 12s 後 timeout → `error_flag == "asr_timeout"`，fallback.play 呼叫 `asr_timeout`
     - stream raise Exception → `error_flag == "asr_api_error"`
   - 用 fake TTS 模擬單 chunk 卡住 → 跳過該 chunk 且後續句繼續
-- [ ] **手動驗證**：
+- [x] **手動驗證**：
   - 停掉 LLM server（`docker compose stop ollama` 或改錯 `LLM_BASE_URL`）→ 對話時應在 ~5s 聽到 `llm_error` fallback
   - 停掉 ASR（斷網或改錯 URL）→ 應聽到 `asr_timeout` fallback
   - DB 對應輪次 `errorFlag` 正確填入
-- [ ] **驗收**：
+- [x] **驗收**：
   - `uv run pytest worker/tests/test_runner_errors.py -v` 全綠
   - 三種手動斷線情境皆有對應 fallback 音訊與 `errorFlag`
   - 不吞例外：未分類例外 log 完整 traceback 後 re-raise（遵守 CLAUDE.md 錯誤處理規則）
-- [ ] **Commit**：`feat(worker): add per-stage timeouts and error classification`
+- [x] **Commit**：`feat(worker): add per-stage timeouts and error classification` (d12425a)
 
 ---
 
