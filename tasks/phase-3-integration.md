@@ -367,3 +367,31 @@
 - ❌ **吞掉未分類例外** → `except Exception as e: logger.exception(...); error_flag = "unknown"; raise` 或降級後重拋
 - ❌ **測試用真實 LLM/ASR** → Phase 3 測試全部走 fake/mock，符合 CLAUDE.md 「IO 包裝用 mock 測介面契約」
 - ❌ **把 Barge-in 或 Tool call 偷渡進來** → 留給 Phase 4 / 6
+
+---
+
+## 🐛 實測發現的 Bug（P3 開發期間，2026-04-29）
+
+> 這些 bug 在實作 P3-05 後進行語音測試時發現並修復，記錄在此供未來維護參考。
+
+### Bug 1：`asyncio.wait_for(aiter.__anext__(), timeout=t)` 破壞 Piper async generator 狀態
+
+**症狀**：最後一句話常常不播出來。  
+**根因**：`asyncio.wait_for` 在 Python 3.12 把 coroutine 包成獨立 Task 執行。timeout 觸發時，Task 被 cancel，但 Piper `synthesize()` async generator 內部正在 `await queue.get()` 等待合成執行緒 push chunk — Task cancel 後 generator 內部狀態損毀，後續 chunk 全部拿不到。  
+**修法**：`speak_taibun` 恢復使用 `async for chunk in self._tts.synthesize(taibun):` 原始寫法。Local Piper 的合成執行緒不會無限卡住（最終會 push `None` 結束），不需要 per-chunk timeout。  
+**相關 commit**：`7c0b3fc`
+
+### Bug 2：`asyncio.timeout` 包覆 TTS 合成導致句子被丟棄
+
+**症狀**：同上，最後一句話不播，且難以重現（只在對話時間較長時出現）。  
+**根因**：`_run_llm_tts` 的 `async with asyncio.timeout(llm_total_timeout):` 同時包覆了 LLM token 串流 **與** TTS 合成。timeout 觸發時，`CancelledError` 在 TTS 合成的 `await queue.get()` 注入；此時該句已被 `splitter.feed()` 從 buffer 取出，`flush()` 也救不回來，句子直接消失。  
+**修法**：兩階段處理——Phase 1（timeout 內）只做 LLM token 收集，把分句結果存入 `pending_sentences[]`；Phase 2（timeout 外）依序合成並播放，不受 timeout 中斷。  
+**代價**：`latency_first_audio` 增加（TTS 需等全部 token 收集完才開始），但正確性優先。  
+**相關 commit**：`12bc7aa`
+
+### Bug 3：taibun 套件字典不完整（`嘴`、`踝`）
+
+**症狀**：log 出現 `[text] speaking=我無嘴巴， (Gua2 bo5 嘴 pa1,)`，漢字直接殘留在台羅輸出中，Piper 無法發音。  
+**根因**：`嘴` 雖然在 `prons_dict` 有正確讀音 `tshuì`，但 taibun 實際查找的 `word_dict` 沒有這個字；`踝` 則兩個 dict 都缺。  
+**修法**：加入 `_TAIBUN_PATCHES` dict（`worker/pipeline/text_processor.py`），直接 patch 進 taibun 內部 dict。`耳朵`、`脖子` 等詞已由 TaigiConverter 漢羅層處理，不需另外補。  
+**相關 commit**：`4ad3a03`
