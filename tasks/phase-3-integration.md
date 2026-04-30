@@ -341,11 +341,13 @@
   - 觀察到的問題與延遲瓶頸分析（指出哪一段最慢）
   - 對照 `plan.md §6.3` 目標：是否達標
 - [ ] **驗收**：
-  - 平均 `latency_total` < 1500ms
+  - 平均 `latency_first_audio` < 4000ms（`latency_total` 含音訊播放時間，不適合當門檻；見下方說明）
   - 測試過程**無 Worker crash**、**無 Playground 斷線**
   - Error rate < 5%（手動觸發的斷線那 2 次算進去仍需 < 5% 則要 ≥ 40 turn）
   - 5 種 fallback 情境至少出現過 `asr_timeout`、`llm_error` 兩種實測
   - 報告已 commit
+
+> **⚠️ 指標說明（2026-04-30 實測後修正）**：原本驗收條件「`latency_total < 1500ms`」寫錯了。`latency_total` 是 `process_utterance` 的**完整執行時間**，包含音訊播放本身（每句台語音訊約 2–5 秒）。一個兩句的回應播放時間就超過 5 秒，這個門檻永遠不可能達到。**真正反映使用者感知的指標是 `latency_first_audio`**（使用者等到聽見第一個字的時間），目標 < 4000ms。目前實測約 3500ms，主要瓶頸為 LLM 推論速度（~330ms/token on 9B model on remote Windows GPU via Tailscale）。
 - [ ] **Commit**：`docs(phase-3): add stability run report and latency summary script`
 
 ---
@@ -388,6 +390,21 @@
 **修法**：兩階段處理——Phase 1（timeout 內）只做 LLM token 收集，把分句結果存入 `pending_sentences[]`；Phase 2（timeout 外）依序合成並播放，不受 timeout 中斷。  
 **代價**：`latency_first_audio` 增加（TTS 需等全部 token 收集完才開始），但正確性優先。  
 **相關 commit**：`12bc7aa`
+
+### Perf 1：TTS 合成與 LLM streaming 改為真正並行（2026-04-30）
+
+**背景**：P3-05 修正 Bug 2 後，採用兩階段設計（Phase 1 收集全部 token，Phase 2 合成並播放）。雖然 TTS tasks 並行啟動，但仍需等待 LLM 全部完成才開始播音，導致 `latency_first_audio` = LLM 總時間（7–17秒）。
+
+**改法 1**（`c80badc`）：Phase 1 以 `asyncio.create_task` 並行啟動 TTS，Phase 2 `await` 有序播放 — 節省了多句 TTS 的串行等待，但 first_audio 仍受限於 LLM 完成時間。
+
+**改法 2（最終方案）**（`47aa8a4`）：採用 `asyncio.gather(_produce, _consume)` producer-consumer 架構：
+- Producer：串流 LLM tokens → splitter → `asyncio.create_task(synthesize)` → put 到 `play_queue`
+- Consumer：從 `play_queue.get()` 取 Task → `await task`（等 TTS 完成）→ 播放
+- 兩者完全並行：第一句 TTS 完成即播，不等 LLM 結束
+
+**實測效果**：`latency_first_audio` 從 7–17 秒 → 約 3.5 秒（降低約 70%）。
+
+**附帶新增**（`2a6a45b`）：`LLM_MAX_TOKENS` env 限制 LLM 最大 token 數，防止過長回應。
 
 ### Bug 3：taibun 套件字典不完整（`嘴`、`踝`）
 
