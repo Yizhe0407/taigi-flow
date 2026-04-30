@@ -21,6 +21,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger("worker.session.runner")
 
 
+def _parse_int_env(env_key: str) -> int | None:
+    raw = os.getenv(env_key)
+    if raw is None:
+        return None
+    try:
+        v = int(raw)
+        return v if v > 0 else None
+    except ValueError:
+        logger.warning("Invalid %s=%s, ignored", env_key, raw)
+        return None
+
+
 def _parse_timeout(env_key: str, default: float) -> float:
     raw = os.getenv(env_key)
     if raw is None:
@@ -361,7 +373,8 @@ class PipelineRunner:
             try:
                 async with asyncio.timeout(self._llm_total_timeout):
                     async for token in await self._llm.stream(
-                        messages=self._memory.to_messages()
+                        messages=self._memory.to_messages(),
+                        max_tokens=_parse_int_env("LLM_MAX_TOKENS"),
                     ):
                         token_count += 1
                         if first_token_ms is None:
