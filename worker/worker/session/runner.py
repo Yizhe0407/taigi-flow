@@ -66,6 +66,65 @@ class PipelineRunner:
             else _parse_timeout("LLM_TOTAL_TIMEOUT", 15.0)
         )
 
+    async def _synthesize_to_pcm(self, taibun: str, trace_id: str) -> bytes:
+        """Collect all TTS chunks into a single PCM bytes object."""
+        if not self._tts:
+            return b""
+        tts_start = time.perf_counter()
+        chunks: list[bytes] = []
+        try:
+            async for chunk in self._tts.synthesize(taibun):
+                chunks.append(chunk)
+            pcm = b"".join(chunks)
+            logger.info(
+                "[%s][tts] synthesized %d bytes in %.1fms",
+                trace_id,
+                len(pcm),
+                (time.perf_counter() - tts_start) * 1000,
+            )
+            return pcm
+        except Exception as e:
+            logger.error("[%s][tts] synthesis failed: %s", trace_id, e)
+            raise
+
+    async def _play_pcm_bytes(
+        self,
+        pcm: bytes,
+        trace_id: str,
+        on_first_audio: Callable[[], None] | None = None,
+    ) -> None:
+        """Send pre-synthesized PCM bytes as 20ms frames to the audio source."""
+        chunk_size = 640
+        first_frame = True
+        n_full = len(pcm) // chunk_size
+        for j in range(n_full):
+            if first_frame:
+                if on_first_audio is not None:
+                    on_first_audio()
+                first_frame = False
+            sub = pcm[j * chunk_size : (j + 1) * chunk_size]
+            await self._audio_source.capture_frame(
+                rtc.AudioFrame(
+                    data=sub,
+                    sample_rate=16000,
+                    num_channels=1,
+                    samples_per_channel=chunk_size // 2,
+                )
+            )
+        leftover = pcm[n_full * chunk_size :]
+        if leftover:
+            if first_frame and on_first_audio is not None:
+                on_first_audio()
+            padded = leftover + b"\x00" * (chunk_size - len(leftover))
+            await self._audio_source.capture_frame(
+                rtc.AudioFrame(
+                    data=padded,
+                    sample_rate=16000,
+                    num_channels=1,
+                    samples_per_channel=chunk_size // 2,
+                )
+            )
+
     async def speak_taibun(
         self,
         taibun: str,
@@ -78,51 +137,8 @@ class PipelineRunner:
             )
             return
         try:
-            chunk_count = 0
-            pcm_bytes = 0
-            tts_start = time.perf_counter()
-            chunk_size = 640
-            leftover = b""
-            first_frame = True
-            async for chunk in self._tts.synthesize(taibun):
-                chunk_count += 1
-                pcm_bytes += len(chunk)
-                data = leftover + chunk
-                n_full = len(data) // chunk_size
-                for j in range(n_full):
-                    if first_frame:
-                        if on_first_audio is not None:
-                            on_first_audio()
-                        first_frame = False
-                    sub = data[j * chunk_size : (j + 1) * chunk_size]
-                    await self._audio_source.capture_frame(
-                        rtc.AudioFrame(
-                            data=sub,
-                            sample_rate=16000,
-                            num_channels=1,
-                            samples_per_channel=chunk_size // 2,
-                        )
-                    )
-                leftover = data[n_full * chunk_size :]
-            if leftover:
-                if first_frame and on_first_audio is not None:
-                    on_first_audio()
-                padded = leftover + b"\x00" * (chunk_size - len(leftover))
-                await self._audio_source.capture_frame(
-                    rtc.AudioFrame(
-                        data=padded,
-                        sample_rate=16000,
-                        num_channels=1,
-                        samples_per_channel=chunk_size // 2,
-                    )
-                )
-            logger.info(
-                "[%s][tts] done chunks=%s bytes=%s cost_ms=%.1f",
-                trace_id,
-                chunk_count,
-                pcm_bytes,
-                (time.perf_counter() - tts_start) * 1000,
-            )
+            pcm = await self._synthesize_to_pcm(taibun, trace_id)
+            await self._play_pcm_bytes(pcm, trace_id, on_first_audio)
         except Exception as e:
             logger.error("[%s][tts] failed: %s", trace_id, e)
             raise
@@ -312,11 +328,31 @@ class PipelineRunner:
         last_hanlo = ""
         last_taibun = ""
         partial_flag: str | None = None
-        # Sentences collected during LLM streaming; synthesized after the
-        # LLM timeout context exits so TTS is never interrupted mid-synthesis.
-        pending_sentences: list[str] = []
 
-        # ── Phase 1: collect tokens (LLM total timeout guards this block only) ──
+        # Each entry: (hanlo, taibun, asyncio.Task[pcm_bytes])
+        # Tasks are launched as sentences become ready so TTS runs
+        # concurrently with the remaining LLM token stream.
+        tts_queue: list[tuple[str, str, asyncio.Task[bytes]]] = []
+
+        def _launch(sentence: str) -> None:
+            nonlocal last_hanlo, last_taibun
+            res = self._text_processor.process(sentence)
+            logger.info(
+                "[%s][text] sentence=%s → %s (%s)",
+                trace_id,
+                sentence,
+                res.hanlo,
+                res.taibun,
+            )
+            if not res.taibun.strip():
+                return
+            last_hanlo, last_taibun = res.hanlo, res.taibun
+            task: asyncio.Task[bytes] = asyncio.create_task(
+                self._synthesize_to_pcm(res.taibun, trace_id)
+            )
+            tts_queue.append((res.hanlo, res.taibun, task))
+
+        # ── Phase 1: stream LLM tokens; launch TTS tasks as sentences are ready ──
         try:
             async with asyncio.timeout(self._llm_total_timeout):
                 async for token in await self._llm.stream(
@@ -326,15 +362,19 @@ class PipelineRunner:
                     if first_token_ms is None:
                         first_token_ms = (time.perf_counter() - llm_start) * 1000
                         logger.info(
-                            "[%s][llm] first_token_ms=%.1f", trace_id, first_token_ms
+                            "[%s][llm] first_token_ms=%.1f",
+                            trace_id,
+                            first_token_ms,
                         )
                         if on_first_token is not None:
                             on_first_token()
                     full_response += token
-                    pending_sentences.extend(splitter.feed(token))
+                    for sentence in splitter.feed(token):
+                        _launch(sentence)
         except TimeoutError:
             if first_token_ms is None:
-                # No token arrived before deadline → first-token timeout; propagate
+                for _, _, t in tts_queue:
+                    t.cancel()
                 raise
             logger.warning(
                 "[%s][llm] total timeout after %.1fs, partial len=%s",
@@ -346,15 +386,21 @@ class PipelineRunner:
 
         rest = splitter.flush()
         if rest:
-            pending_sentences.append(rest)
+            _launch(rest)
 
-        # ── Phase 2: synthesize all sentences (no timeout — TTS must complete) ──
-        for sentence in pending_sentences:
-            hanlo, taibun = await self._speak_sentence(
-                sentence, trace_id, on_first_audio
-            )
-            if hanlo or taibun:
-                last_hanlo, last_taibun = hanlo, taibun
+        # ── Phase 2: await tasks in order and play ──
+        # By the time we reach here, early sentences' TTS tasks may already
+        # be done (they ran concurrently while LLM was still streaming).
+        for hanlo, taibun, task in tts_queue:
+            try:
+                pcm = await task
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.error("[%s][tts] sentence failed %r: %s", trace_id, taibun, e)
+                continue
+            await self._play_pcm_bytes(pcm, trace_id, on_first_audio)
+            last_hanlo, last_taibun = hanlo, taibun
 
         if full_response:
             self._memory.add("assistant", full_response)
@@ -366,16 +412,3 @@ class PipelineRunner:
             (time.perf_counter() - llm_start) * 1000,
         )
         return full_response, last_hanlo, last_taibun, partial_flag
-
-    async def _speak_sentence(
-        self,
-        sentence: str,
-        trace_id: str,
-        on_first_audio: Callable[[], None] | None = None,
-    ) -> tuple[str, str]:
-        logger.info("[%s][text] sentence=%s", trace_id, sentence)
-        res = self._text_processor.process(sentence)
-        if res.taibun.strip():
-            logger.info("[%s][text] speaking=%s (%s)", trace_id, res.hanlo, res.taibun)
-            await self.speak_taibun(res.taibun, trace_id, on_first_audio)
-        return res.hanlo, res.taibun

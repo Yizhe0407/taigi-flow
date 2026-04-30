@@ -194,8 +194,8 @@ async def test_llm_total_timeout_after_first_token_sets_partial_flag() -> None:
 
 
 @pytest.mark.asyncio
-async def test_tts_exception_triggers_llm_error_fallback() -> None:
-    """TTS synthesis error propagates up and plays llm_error fallback."""
+async def test_tts_exception_skips_sentence_and_continues() -> None:
+    """TTS synthesis error skips the failed sentence; pipeline does not abort."""
 
     async def _broken_synth(text: str):  # type: ignore[no-untyped-def]
         raise RuntimeError("Piper synthesis failed")
@@ -203,7 +203,8 @@ async def test_tts_exception_triggers_llm_error_fallback() -> None:
 
     tts = MagicMock()
     tts.synthesize = _broken_synth
-    llm = _llm_yielding("回應。")
+    # Two sentences: both TTS tasks fail, but pipeline completes normally
+    llm = _llm_yielding("第一句。", "第二句。")
     runner, fb, log_repo = _make_runner(
         asr=_asr_returning("question"),
         llm=llm,
@@ -212,5 +213,8 @@ async def test_tts_exception_triggers_llm_error_fallback() -> None:
 
     await runner.process_utterance(_AUDIO)
 
-    fb.play.assert_awaited_once_with("llm_error")
-    assert log_repo.log_turn.call_args.kwargs["error_flag"] == "llm_api_error"
+    # No fallback played — TTS errors are sentence-level, not fatal
+    fb.play.assert_not_awaited()
+    # Pipeline still completes: log_turn is called, no error_flag
+    assert log_repo.log_turn.called
+    assert log_repo.log_turn.call_args.kwargs["error_flag"] is None
