@@ -1905,7 +1905,7 @@ wheels = [
 [[package]]
 name = "taigi-converter"
 version = "0.1.0"
-source = { git = "https://github.com/Yizhe0407/HanloFlow.git#a51fc2ce2fe5254d09a09b74492ea6a342b9970f" }
+source = { git = "https://github.com/Yizhe0407/HanloFlow.git#155da93d7dd1847662c1264710096f57ce12cb48" }
 dependencies = [
     { name = "msgpack" },
 ]
