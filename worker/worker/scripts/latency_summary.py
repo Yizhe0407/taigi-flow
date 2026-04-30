@@ -61,23 +61,45 @@ def _naive(dt: datetime) -> datetime:
     return dt.replace(tzinfo=None) if dt.tzinfo else dt
 
 
+async def _resolve_session(db_session: object, prefix: str) -> Session | None:
+    """Accept full UUID or unique prefix."""
+    from sqlalchemy.ext.asyncio import AsyncSession as _AS
+
+    assert isinstance(db_session, _AS)
+    if len(prefix) == 36:
+        result = await db_session.execute(select(Session).where(Session.id == prefix))
+        return result.scalar_one_or_none()
+    result = await db_session.execute(
+        select(Session).where(Session.id.like(f"{prefix}%"))
+    )
+    rows = list(result.scalars())
+    if len(rows) == 1:
+        return rows[0]
+    if len(rows) > 1:
+        print(
+            f"Ambiguous prefix '{prefix}' matches {len(rows)} sessions. Use more chars."
+        )
+        return None
+    return None
+
+
 async def _run_summary(session_id: str) -> None:
     async with async_session_factory() as db:
-        sess_result = await db.execute(select(Session).where(Session.id == session_id))
-        sess: Session | None = sess_result.scalar_one_or_none()
+        sess = await _resolve_session(db, session_id)
         if sess is None:
             print(f"Session not found: {session_id}")
             return
+        full_id = sess.id
 
         logs_result = await db.execute(
             select(InteractionLog)
-            .where(InteractionLog.sessionId == session_id)
+            .where(InteractionLog.sessionId == full_id)
             .order_by(InteractionLog.turnIndex)
         )
         logs: list[InteractionLog] = list(logs_result.scalars())
 
     if not logs:
-        print(f"Session {session_id} has no interaction logs.")
+        print(f"Session {full_id} has no interaction logs.")
         return
 
     turns = len(logs)
@@ -98,8 +120,7 @@ async def _run_summary(session_id: str) -> None:
     error_counts: Counter[str] = Counter(errors)
     error_rate = len(errors) / turns * 100 if turns else 0.0
 
-    short_id = session_id[:8]
-    print(f"\nSession: {short_id}…   Turns: {turns}   Duration: {duration}")
+    print(f"\nSession: {full_id}   Turns: {turns}   Duration: {duration}")
     print()
     print(_stats_line("latency_total", total))
     print(_stats_line("latency_asr_end", asr_end))
@@ -125,12 +146,13 @@ async def _list_sessions(limit: int = 10) -> None:
         print("No sessions found.")
         return
 
-    print(f"\n  {'ID':8}   {'Room':<25}  {'Started':<20}  Ended")
-    print("  " + "-" * 70)
+    hdr = f"  {'ID':<36}  {'Room':<25}  {'Started':<21} Ended"
+    print(f"\n{hdr}")
+    print("  " + "-" * 90)
     for s in sessions:
         started = s.startedAt.strftime("%Y-%m-%d %H:%M:%S")
         ended = s.endedAt.strftime("%H:%M:%S") if s.endedAt else "ongoing"
-        print(f"  {s.id[:8]}…  {s.livekitRoom:<25}  {started}  {ended}")
+        print(f"  {s.id:<36}  {s.livekitRoom:<25}  {started}  {ended}")
     print()
 
 

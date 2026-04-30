@@ -104,6 +104,13 @@ async def entrypoint(ctx: JobContext) -> None:
             await asyncio.sleep(1)
     except asyncio.CancelledError:
         logger.info("Agent stopped.")
+    finally:
+        if components.log_repo is not None and components.session_id:
+            try:
+                await components.log_repo.end_session(components.session_id)
+                logger.info("Session ended: %s", components.session_id)
+            except Exception as e:
+                logger.error("Failed to end session: %s", e)
 
 
 def main() -> None:
