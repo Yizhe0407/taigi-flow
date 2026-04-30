@@ -329,10 +329,13 @@ class PipelineRunner:
         last_taibun = ""
         partial_flag: str | None = None
 
-        # Each entry: (hanlo, taibun, asyncio.Task[pcm_bytes])
-        # Tasks are launched as sentences become ready so TTS runs
-        # concurrently with the remaining LLM token stream.
-        tts_queue: list[tuple[str, str, asyncio.Task[bytes]]] = []
+        # True streaming: producer (LLM→splitter→TTS launch) and consumer
+        # (await TTS task → play) run concurrently via asyncio.gather.
+        # Consumer plays sentence 1 as soon as its TTS is done, without
+        # waiting for the rest of the LLM token stream to finish.
+        tts_tasks: list[asyncio.Task[bytes]] = []
+        # Task[bytes] | None; None = sentinel (producer finished)
+        play_queue: asyncio.Queue[asyncio.Task[bytes] | None] = asyncio.Queue()
 
         def _launch(sentence: str) -> None:
             nonlocal last_hanlo, last_taibun
@@ -350,57 +353,70 @@ class PipelineRunner:
             task: asyncio.Task[bytes] = asyncio.create_task(
                 self._synthesize_to_pcm(res.taibun, trace_id)
             )
-            tts_queue.append((res.hanlo, res.taibun, task))
+            tts_tasks.append(task)
+            play_queue.put_nowait(task)
 
-        # ── Phase 1: stream LLM tokens; launch TTS tasks as sentences are ready ──
-        try:
-            async with asyncio.timeout(self._llm_total_timeout):
-                async for token in await self._llm.stream(
-                    messages=self._memory.to_messages()
-                ):
-                    token_count += 1
-                    if first_token_ms is None:
-                        first_token_ms = (time.perf_counter() - llm_start) * 1000
-                        logger.info(
-                            "[%s][llm] first_token_ms=%.1f",
-                            trace_id,
-                            first_token_ms,
-                        )
-                        if on_first_token is not None:
-                            on_first_token()
-                    full_response += token
-                    for sentence in splitter.feed(token):
-                        _launch(sentence)
-        except TimeoutError:
-            if first_token_ms is None:
-                for _, _, t in tts_queue:
-                    t.cancel()
-                raise
-            logger.warning(
-                "[%s][llm] total timeout after %.1fs, partial len=%s",
-                trace_id,
-                self._llm_total_timeout,
-                len(full_response),
-            )
-            partial_flag = "llm_partial"
-
-        rest = splitter.flush()
-        if rest:
-            _launch(rest)
-
-        # ── Phase 2: await tasks in order and play ──
-        # By the time we reach here, early sentences' TTS tasks may already
-        # be done (they ran concurrently while LLM was still streaming).
-        for hanlo, taibun, task in tts_queue:
+        async def _produce() -> None:
+            nonlocal full_response, first_token_ms, token_count, partial_flag
             try:
-                pcm = await task
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.error("[%s][tts] sentence failed %r: %s", trace_id, taibun, e)
-                continue
-            await self._play_pcm_bytes(pcm, trace_id, on_first_audio)
-            last_hanlo, last_taibun = hanlo, taibun
+                async with asyncio.timeout(self._llm_total_timeout):
+                    async for token in await self._llm.stream(
+                        messages=self._memory.to_messages()
+                    ):
+                        token_count += 1
+                        if first_token_ms is None:
+                            first_token_ms = (time.perf_counter() - llm_start) * 1000
+                            logger.info(
+                                "[%s][llm] first_token_ms=%.1f",
+                                trace_id,
+                                first_token_ms,
+                            )
+                            if on_first_token is not None:
+                                on_first_token()
+                        full_response += token
+                        for sentence in splitter.feed(token):
+                            _launch(sentence)
+            except TimeoutError:
+                if first_token_ms is None:
+                    raise  # first-token timeout → caller handles
+                logger.warning(
+                    "[%s][llm] total timeout after %.1fs, partial len=%s",
+                    trace_id,
+                    self._llm_total_timeout,
+                    len(full_response),
+                )
+                partial_flag = "llm_partial"
+            finally:
+                rest = splitter.flush()
+                if rest:
+                    _launch(rest)
+                play_queue.put_nowait(None)  # sentinel
+
+        async def _consume() -> None:
+            while True:
+                item = await play_queue.get()
+                if item is None:
+                    break
+                try:
+                    pcm = await item
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:
+                    logger.error("[%s][tts] sentence failed: %s", trace_id, e)
+                    continue
+                await self._play_pcm_bytes(pcm, trace_id, on_first_audio)
+
+        produce_task = asyncio.create_task(_produce())
+        consume_task = asyncio.create_task(_consume())
+        try:
+            await asyncio.gather(produce_task, consume_task)
+        except BaseException:
+            for t in tts_tasks:
+                if not t.done():
+                    t.cancel()
+            produce_task.cancel()
+            consume_task.cancel()
+            raise
 
         if full_response:
             self._memory.add("assistant", full_response)

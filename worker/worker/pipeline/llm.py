@@ -44,6 +44,7 @@ class LLMClient:
         messages: list[dict[str, str]],
         tools: list[dict[str, object]] | None = None,
         timeout: float = 15.0,
+        max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         kwargs: dict[str, object] = {
             "model": self._model,
@@ -52,6 +53,8 @@ class LLMClient:
         }
         if tools:
             kwargs["tools"] = tools
+        if max_tokens is not None:
+            kwargs["max_tokens"] = max_tokens
 
         try:
             stream: Any = await asyncio.wait_for(
