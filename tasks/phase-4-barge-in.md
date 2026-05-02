@@ -328,8 +328,10 @@
 
 - ❌ **以為 audio_source 還在播 → 強制 disconnect** → `clear_queue()` 已足夠丟棄 buffered frame，不需要 disconnect track
 - ❌ **`tts.clear_queue` 後立刻又呼叫 `synthesize`** → `_clear_event` 還沒被新 `synthesize` 重置會直接跳出。`tts.synthesize` 開頭已 `_clear_event.clear()`，但要確認 cancel 完成後再啟新 turn
-- ❌ **VAD START 在 SPEAKING 一定觸發 barge-in** → 必須先檢查 `time_since_last_tts_ms < 200` 與動態門檻，否則自說話會誤觸發
-- ❌ **改 VAD 門檻時 forget 重置** → SPEAKING 結束後沒重置會讓下次 IDLE 用 0.75，使用者要更大聲才被偵測
+- ❌ **VAD START 在 SPEAKING 一定觸發 barge-in** → 靠動態門檻（P4-04）抑制，不需額外時間判斷
+- ❌ **用 `time_since_last_tts_ms < 200` 當 barge-in 閘門** → `mark_tts_output()` 每 20ms 呼叫一次，所以 `time_since_last_tts_ms` 在 TTS 播放期間永遠 < 200ms，閘門永遠成立 → barge-in 永遠被抑制。**已移除此判斷**（見 ADR 004）
+- ❌ **VAD 動態門檻用 plan.md 的 0.75 / 500ms** → Silero 預設 `min_speech_duration=0.05s`；500ms 是 10 倍預設值。加上指數平滑，使用者需要持續 700ms+ 高置信語音才能觸發，實務上不可能打斷。**實際採用 0.60 / 0.15s**（見 ADR 004）
+- ❌ **改 VAD 門檻時 forget 重置** → SPEAKING 結束後必須回到 Silero 原始預設（0.5 / 0.05s），否則後續 IDLE 狀態也會用較嚴格的門檻
 - ❌ **在 VoiceController 內做 I/O** → controller 應該保持純粹（state + timestamp），所有 I/O 由 callback / 外層 method 注入
 - ❌ **cancel 之後忘記等 task done** → cancel 是 async signal，必須 `await task` 或在 finally 內讓 task 自己結束。本 phase 用 finally 結構確保
 - ❌ **把 splitter 變成 instance var 然後忘記在 cancel 時 flush** → 目前 splitter 是 `_run_llm_tts` local，cancel 時 task 結束自動清理；不要為了「方便 flush」改成 instance var
