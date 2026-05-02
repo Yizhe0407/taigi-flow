@@ -105,15 +105,16 @@ class AudioProcessor:
                         fallback_buffer.clear()
                         vc_state = self._vc.state
                         if vc_state == VoiceState.SPEAKING:
-                            time_since_ms = self._vc.time_since_last_tts_ms()
-                            if time_since_ms < 200:
-                                logger.info(
-                                    "VAD START suppressed (self-speech, %.0fms"
-                                    " since tts)",
-                                    time_since_ms,
-                                )
-                                continue
-                            logger.info("Barge-in detected, triggering cleanup")
+                            # Dynamic VAD threshold (0.75 set by P4-04) already
+                            # filters TTS echo at the Silero level. A time-based
+                            # guard is NOT applied here because mark_tts_output()
+                            # fires every ~20ms during playback, making
+                            # time_since_last_tts_ms always < 200ms and
+                            # permanently blocking barge-in.
+                            logger.info(
+                                "Barge-in detected (%.0fms since last tts frame)",
+                                self._vc.time_since_last_tts_ms(),
+                            )
                             await self._vc.on_barge_in(
                                 runner=self._runner,
                                 tts=self._runner._tts,  # pyright: ignore[reportPrivateUsage]
