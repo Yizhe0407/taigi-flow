@@ -47,16 +47,7 @@ class AudioProcessor:
 
     def _on_vc_change(self, old: VoiceState, new: VoiceState) -> None:
         """Single on_change handler: VAD threshold adjustment + barge-in cleanup."""
-        # VAD threshold: slightly elevated during SPEAKING to suppress TTS echo.
-        if new == VoiceState.SPEAKING:
-            self._vad.update_thresholds(
-                activation_threshold=0.6, min_speech_duration=0.15
-            )
-        elif old == VoiceState.SPEAKING:
-            self._vad.update_thresholds(
-                activation_threshold=0.5, min_speech_duration=0.05
-            )
-        # Cleanup: triggered by the FSM transition, not by the caller.
+        self._apply_vad_thresholds(old, new)
         if new == VoiceState.BARGED_IN:
             self._spawn(self._barge_in_cleanup())
 
@@ -69,11 +60,15 @@ class AudioProcessor:
 
     # Keep as a named method so tests can still reference it directly.
     def _apply_vad_thresholds(self, old: VoiceState, new: VoiceState) -> None:
-        if new == VoiceState.SPEAKING:
+        # Raise threshold whenever agent is "busy" (THINKING or SPEAKING) to
+        # prevent accidental barge-in from brief noise. Echo suppression is only
+        # relevant during SPEAKING, but min_speech_duration guards both states.
+        _busy = (VoiceState.THINKING, VoiceState.SPEAKING)
+        if new in _busy:
             self._vad.update_thresholds(
                 activation_threshold=0.6, min_speech_duration=0.15
             )
-        elif old == VoiceState.SPEAKING:
+        elif old in _busy:
             self._vad.update_thresholds(
                 activation_threshold=0.5, min_speech_duration=0.05
             )
