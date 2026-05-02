@@ -9,6 +9,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from livekit import rtc
+
+    from ..pipeline.tts import PiperTTS
+    from ..session.runner import PipelineRunner
+
 logger = logging.getLogger("worker.audio.voice_controller")
 
 
@@ -83,3 +88,23 @@ class VoiceController:
     def on_change(self, cb: Callable[[VoiceState, VoiceState], None]) -> None:
         """Register a state-change callback. Called in registration order."""
         self._on_change.append(cb)
+
+    async def on_barge_in(
+        self,
+        *,
+        runner: PipelineRunner,
+        tts: PiperTTS | None,
+        audio_source: rtc.AudioSource,
+    ) -> None:
+        """Six-step barge-in cleanup sequence (order is mandatory):
+        1. Discard buffered audio frames immediately.
+        2. Signal TTS synth thread to stop at next chunk boundary.
+        3. Cancel the current pipeline turn task (cascades to all TTS sub-tasks).
+        4-5. (handled by process_utterance finally / task GC)
+        6. Transition to BARGED_IN; caller's finally will transition to LISTENING.
+        """
+        audio_source.clear_queue()
+        if tts is not None:
+            tts.clear_queue()
+        runner.cancel_current_turn()
+        self.transition(VoiceState.BARGED_IN)

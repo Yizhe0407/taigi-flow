@@ -94,11 +94,19 @@ class AudioProcessor:
                         fallback_buffer.clear()
                         vc_state = self._vc.state
                         if vc_state == VoiceState.SPEAKING:
-                            # Potential barge-in — P4-03 will implement cleanup;
-                            # for now just log so state transitions are visible.
-                            logger.info(
-                                "VAD START while SPEAKING — barge-in candidate"
-                                " (not yet handled)"
+                            time_since_ms = self._vc.time_since_last_tts_ms()
+                            if time_since_ms < 200:
+                                logger.info(
+                                    "VAD START suppressed (self-speech, %.0fms"
+                                    " since tts)",
+                                    time_since_ms,
+                                )
+                                continue
+                            logger.info("Barge-in detected, triggering cleanup")
+                            await self._vc.on_barge_in(
+                                runner=self._runner,
+                                tts=self._runner._tts,  # pyright: ignore[reportPrivateUsage]
+                                audio_source=self._runner._audio_source,  # pyright: ignore[reportPrivateUsage]
                             )
                         elif vc_state in (VoiceState.LISTENING, VoiceState.THINKING):
                             logger.info(

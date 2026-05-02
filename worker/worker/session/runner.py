@@ -70,6 +70,8 @@ class PipelineRunner:
         self._pipeline_busy = False
         self._utterance_seq = 0
         self._turn_index = 0
+        self._current_turn_task: asyncio.Task[None] | None = None
+        self._was_barged_in: bool = False
         self._asr_timeout = (
             asr_timeout
             if asr_timeout is not None
@@ -171,6 +173,14 @@ class PipelineRunner:
                     "[%s][notice] tts failed, user will hear silence: %s", trace_id, e
                 )
 
+    def cancel_current_turn(self) -> None:
+        """Cancel the active pipeline turn.
+        Audio cleanup is done by VoiceController.on_barge_in."""
+        if self._current_turn_task is None or self._current_turn_task.done():
+            return
+        self._was_barged_in = True
+        self._current_turn_task.cancel()
+
     async def process_utterance(
         self, audio_bytes: bytes, source_tag: str = "unknown"
     ) -> None:
@@ -184,6 +194,8 @@ class PipelineRunner:
             )
             return
         self._pipeline_busy = True
+        self._was_barged_in = False
+        self._current_turn_task = asyncio.current_task()  # type: ignore[assignment]
         self._vc.transition(VoiceState.LISTENING)
         self._utterance_seq += 1
         trace_id = f"utt-{self._utterance_seq:04d}"
@@ -274,6 +286,9 @@ class PipelineRunner:
                 await self._fallback.play("llm_error")
                 self._memory.pop_last()
 
+        except asyncio.CancelledError:
+            self._was_barged_in = True
+            raise
         finally:
             timer.finalize()
             logger.info(
@@ -281,7 +296,10 @@ class PipelineRunner:
                 trace_id,
                 (time.perf_counter() - pipeline_start) * 1000,
             )
-            self._vc.transition(VoiceState.IDLE)
+            if self._was_barged_in:
+                self._vc.transition(VoiceState.LISTENING)
+            else:
+                self._vc.transition(VoiceState.IDLE)
             self._turn_index += 1
             if self._log_repo is not None and self._session_id:
                 try:
@@ -293,7 +311,7 @@ class PipelineRunner:
                         hanlo_text=last_hanlo or None,
                         taibun_text=last_taibun,
                         latencies=timer.as_dict(),
-                        was_barged_in=False,
+                        was_barged_in=self._was_barged_in,
                         error_flag=error_flag,
                     )
                 except Exception as log_err:
