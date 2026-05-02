@@ -120,11 +120,14 @@ class AudioProcessor:
                         # Single frame above threshold → transition immediately.
                         # Cleanup (queue clear + cancel) fires via _on_vc_change.
                         if (
-                            self._vc.state == VoiceState.SPEAKING
+                            self._vc.state
+                            in (VoiceState.SPEAKING, VoiceState.THINKING)
                             and event.probability > _BARGE_IN_PROB_THRESHOLD
                         ):
                             logger.info(
-                                "Fast barge-in prob=%.3f", event.probability
+                                "Fast barge-in state=%s prob=%.3f",
+                                self._vc.state.value,
+                                event.probability,
                             )
                             self._vc.transition(VoiceState.BARGED_IN)
                         if vad_inference_count % 200 == 0:
@@ -146,11 +149,12 @@ class AudioProcessor:
                             # This is the fallback if fast path missed.
                             logger.info("Barge-in via START_OF_SPEECH (fallback)")
                             self._vc.transition(VoiceState.BARGED_IN)
-                        elif vc_state in (VoiceState.LISTENING, VoiceState.THINKING):
-                            logger.info(
-                                "VAD START while %s — consecutive speech",
-                                vc_state.value,
-                            )
+                        elif vc_state == VoiceState.THINKING:
+                            # Barge-in during LLM generation (before first TTS frame).
+                            logger.info("Barge-in during THINKING via START_OF_SPEECH")
+                            self._vc.transition(VoiceState.BARGED_IN)
+                        elif vc_state == VoiceState.LISTENING:
+                            logger.info("VAD START while LISTENING (consecutive)")
                         else:
                             logger.info("VAD start of speech")
                     elif event.type == VADEventType.END_OF_SPEECH:
