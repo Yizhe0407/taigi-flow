@@ -30,7 +30,9 @@ async def entrypoint(ctx: JobContext) -> None:
 
     vad = SileroVAD()
     runner = PipelineRunner(components)
-    processor = AudioProcessor(vad=vad, runner=runner)
+    processor = AudioProcessor(
+        vad=vad, runner=runner, voice_controller=components.voice_controller
+    )
     active_audio_tracks: set[str] = set()
     _track_tasks: set[asyncio.Task[None]] = set()
 

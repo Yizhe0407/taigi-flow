@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from worker.audio.voice_controller import VoiceController
 from worker.pipeline.memory import SlidingWindowMemory
 from worker.session.components import AgentComponents
 from worker.session.runner import PipelineRunner
@@ -64,6 +65,7 @@ def _make_runner(
         log_repo=log_repo,  # type: ignore[arg-type]
         session_id="test-session",
         agent_profile_id="test-profile",
+        voice_controller=VoiceController(),
     )
     runner = PipelineRunner(
         components,

@@ -8,11 +8,14 @@ import numpy as np
 from livekit import rtc
 from livekit.agents.vad import VADEventType
 
+from .voice_controller import VoiceState
+
 if TYPE_CHECKING:
     from collections.abc import Coroutine
 
     from ..session.runner import PipelineRunner
     from .vad import SileroVAD
+    from .voice_controller import VoiceController
 
 logger = logging.getLogger("worker.audio.processor")
 
@@ -27,9 +30,15 @@ _FORCED_WINDOW_RMS_THRESHOLD = 10.0
 
 
 class AudioProcessor:
-    def __init__(self, vad: SileroVAD, runner: PipelineRunner) -> None:
+    def __init__(
+        self,
+        vad: SileroVAD,
+        runner: PipelineRunner,
+        voice_controller: VoiceController,
+    ) -> None:
         self._vad = vad
         self._runner = runner
+        self._vc = voice_controller
         self._bg_tasks: set[asyncio.Task[None]] = set()
 
     def _spawn(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
@@ -80,10 +89,24 @@ class AudioProcessor:
                         continue
                     if event.type == VADEventType.START_OF_SPEECH:
                         vad_speech_started = True
-                        logger.info("VAD start of speech")
                         vad_speech_buffer.clear()
                         fallback_speaking = False
                         fallback_buffer.clear()
+                        vc_state = self._vc.state
+                        if vc_state == VoiceState.SPEAKING:
+                            # Potential barge-in — P4-03 will implement cleanup;
+                            # for now just log so state transitions are visible.
+                            logger.info(
+                                "VAD START while SPEAKING — barge-in candidate"
+                                " (not yet handled)"
+                            )
+                        elif vc_state in (VoiceState.LISTENING, VoiceState.THINKING):
+                            logger.info(
+                                "VAD START while %s — consecutive speech",
+                                vc_state.value,
+                            )
+                        else:
+                            logger.info("VAD start of speech")
                     elif event.type == VADEventType.END_OF_SPEECH:
                         frames = event.frames if event.frames else []
                         if frames:
@@ -99,6 +122,7 @@ class AudioProcessor:
                             len(utterance),
                         )
                         if utterance:
+                            self._vc.transition(VoiceState.LISTENING)
                             self._spawn(
                                 self._runner.process_utterance(
                                     utterance, "vad_end_of_speech"

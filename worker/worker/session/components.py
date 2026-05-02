@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from livekit import rtc
 
 from ..audio.fallback import FallbackPlayer
+from ..audio.voice_controller import VoiceController
 from ..db.repositories import AgentProfileRepository, InteractionLogRepository
 from ..db.session import async_session_factory
 from ..pipeline.asr.breeze import BreezeASR26
@@ -43,6 +44,7 @@ class AgentComponents:
     log_repo: InteractionLogRepository | None
     session_id: str
     agent_profile_id: str | None
+    voice_controller: VoiceController
 
 
 def _build_tts() -> PiperTTS | None:
@@ -158,4 +160,5 @@ async def build_components(livekit_room: str) -> AgentComponents:
         log_repo=log_repo,
         session_id=session_id,
         agent_profile_id=profile_id,
+        voice_controller=VoiceController(),
     )

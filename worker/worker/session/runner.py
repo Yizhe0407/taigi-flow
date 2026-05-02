@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from livekit import rtc
 
+from ..audio.voice_controller import VoiceState
 from ..observability.metrics import LatencyTimer
 from ..pipeline.splitter import SmartSplitter
 
@@ -15,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
 
     from ..audio.fallback import FallbackPlayer
+    from ..audio.voice_controller import VoiceController
     from ..db.repositories import InteractionLogRepository
     from .components import AgentComponents
 
@@ -64,6 +66,7 @@ class PipelineRunner:
         self._fallback: FallbackPlayer = components.fallback
         self._log_repo: InteractionLogRepository | None = components.log_repo
         self._session_id = components.session_id
+        self._vc: VoiceController = components.voice_controller
         self._pipeline_busy = False
         self._utterance_seq = 0
         self._turn_index = 0
@@ -123,6 +126,7 @@ class PipelineRunner:
                     samples_per_channel=chunk_size // 2,
                 )
             )
+            self._vc.mark_tts_output()
         leftover = pcm[n_full * chunk_size :]
         if leftover:
             if first_frame and on_first_audio is not None:
@@ -136,6 +140,7 @@ class PipelineRunner:
                     samples_per_channel=chunk_size // 2,
                 )
             )
+            self._vc.mark_tts_output()
 
     async def speak_taibun(
         self,
@@ -179,6 +184,7 @@ class PipelineRunner:
             )
             return
         self._pipeline_busy = True
+        self._vc.transition(VoiceState.LISTENING)
         self._utterance_seq += 1
         trace_id = f"utt-{self._utterance_seq:04d}"
         pipeline_start = time.perf_counter()
@@ -203,6 +209,7 @@ class PipelineRunner:
             if not _first_audio_fired:
                 _first_audio_fired = True
                 timer.mark("first_audio")
+                self._vc.transition(VoiceState.SPEAKING)
 
         try:
             # ── Stage 1: ASR ─────────────────────────────────────────────────
@@ -233,6 +240,7 @@ class PipelineRunner:
                 return
 
             logger.info("[%s][asr] user_text=%s", trace_id, user_text)
+            self._vc.transition(VoiceState.THINKING)
             self._memory.add("user", user_text)
 
             def _on_first_token() -> None:
@@ -273,6 +281,7 @@ class PipelineRunner:
                 trace_id,
                 (time.perf_counter() - pipeline_start) * 1000,
             )
+            self._vc.transition(VoiceState.IDLE)
             self._turn_index += 1
             if self._log_repo is not None and self._session_id:
                 try:
