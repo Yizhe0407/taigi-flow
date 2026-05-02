@@ -34,10 +34,10 @@
 
 ### P4-01：VoiceController 純狀態機
 
-- [ ] **依賴**：無
-- [ ] **檔案**：`worker/audio/voice_controller.py`、`worker/tests/test_voice_controller.py`
-- [ ] **參照**：`docs/plan.md §3.2`（狀態轉換表）
-- [ ] **輸入規格**：
+- [x] **依賴**：無
+- [x] **檔案**：`worker/audio/voice_controller.py`、`worker/tests/test_voice_controller.py`
+- [x] **參照**：`docs/plan.md §3.2`（狀態轉換表）
+- [x] **輸入規格**：
   ```python
   from __future__ import annotations
   import enum
@@ -84,12 +84,12 @@
       def on_change(self, cb: Callable[[VoiceState, VoiceState], None]) -> None:
           """註冊狀態變化 callback。多個 callback 依註冊順序呼叫。callback 不可 await。"""
   ```
-- [ ] **實作細節**：
+- [x] **實作細節**：
   - `transition()` 收到非法轉換時 `logger.warning(...)` 後仍套用新狀態（fail-soft，避免 mid-call crash）
   - 轉換動作（cancel task / clear queue）**不在這個 class 內**，由外部註冊 callback
   - `mark_tts_output()` 用 `time.perf_counter()`，與 `LatencyTimer` 對齊
   - 不需要鎖（asyncio 單執行緒）
-- [ ] **測試必須涵蓋**（`test_voice_controller.py`，至少 7 case）：
+- [x] **測試必須涵蓋**（`test_voice_controller.py`，至少 7 case）：
   - 初始狀態為 `IDLE`
   - 合法轉換 `IDLE → LISTENING → THINKING → SPEAKING → IDLE` 全綠
   - 合法 barge-in 路徑 `SPEAKING → BARGED_IN → LISTENING`
@@ -97,22 +97,22 @@
   - `on_change` callback 收到正確 (old, new) 參數，多個 callback 都被呼叫
   - `mark_tts_output` + `time_since_last_tts_ms`：用 `monkeypatch.setattr(time, "perf_counter", ...)` 驗證精確
   - `is_speaking()` 只在 `SPEAKING` 為 True
-- [ ] **驗收**：
+- [x] **驗收**：
   - `uv run pytest worker/tests/test_voice_controller.py -v` 全綠
   - `uv run pyright worker/audio/voice_controller.py` strict 通過
-- [ ] **Commit**：`feat(worker): add voice controller fsm`
+- [x] **Commit**：`feat(worker): add voice controller fsm` <!-- 97112ff -->
 
 ---
 
 ### P4-02：把 VoiceController 串入 PipelineRunner 與 AudioProcessor
 
-- [ ] **依賴**：P4-01
-- [ ] **檔案**：
+- [x] **依賴**：P4-01
+- [x] **檔案**：
   - `worker/session/components.py`（擴充：加入 `voice_controller` 欄位）
   - `worker/session/runner.py`（在關鍵點呼叫 `transition()`）
   - `worker/audio/processor.py`（在 VAD 事件中讀取 state）
-- [ ] **參照**：`docs/plan.md §3.2` 狀態轉換表
-- [ ] **`AgentComponents` 擴充**：
+- [x] **參照**：`docs/plan.md §3.2` 狀態轉換表
+- [x] **`AgentComponents` 擴充**：
   ```python
   @dataclasses.dataclass
   class AgentComponents:
@@ -120,7 +120,7 @@
       voice_controller: VoiceController  # 新增
   ```
   在 `build_components()` 直接 `voice_controller = VoiceController()`，不需設定參數。
-- [ ] **`PipelineRunner` 變更**：
+- [x] **`PipelineRunner` 變更**：
   - 建構子讀 `self._vc = components.voice_controller`
   - `process_utterance` 內各階段做 transition：
     | 時機 | 轉換 |
@@ -130,14 +130,14 @@
     | `_run_llm_tts` 內首個 `_play_pcm_bytes` 之前 | `THINKING → SPEAKING` |
     | `finally` 區塊（正常結束） | `SPEAKING → IDLE` 或 `THINKING → IDLE`（依當下狀態決定） |
   - `_play_pcm_bytes` 內每次 `capture_frame` 之後呼叫 `self._vc.mark_tts_output()`（給 P4-04 用）
-- [ ] **`AudioProcessor` 變更**：
+- [x] **`AudioProcessor` 變更**：
   - 建構子接收 `voice_controller: VoiceController`
   - VAD `START_OF_SPEECH` 事件處理：
     - 若 `vc.state == IDLE`：照舊（什麼都不做，等 END_OF_SPEECH）
     - 若 `vc.state == SPEAKING`：**這就是 barge-in 觸發點**，留給 P4-03 處理（本 task 只 log，不真的中斷）
     - 若 `vc.state in (LISTENING, THINKING)`：log info 標記為「使用者連續說話」，不轉狀態
   - VAD `END_OF_SPEECH`：在 `_spawn(runner.process_utterance(...))` 之前呼叫 `vc.transition(LISTENING)`（VAD 確認確實是有效 utterance）
-- [ ] **驗收**：
+- [x] **驗收**：
   - 與 Playground 對話一輪，log 應依序出現：
     ```
     [vc] IDLE → LISTENING (vad end_of_speech)
@@ -147,19 +147,19 @@
     ```
   - DB `InteractionLog.wasBargedIn` 欄位仍為 `false`（barge-in 邏輯尚未啟用）
   - `uv run pyright worker/session/ worker/audio/processor.py` strict 通過
-- [ ] **Commit**：`feat(worker): wire voice controller state transitions into pipeline`
+- [x] **Commit**：`feat(worker): wire voice controller state transitions into pipeline` <!-- db2dadc -->
 
 ---
 
 ### P4-03：Barge-in 觸發與六步清理序列
 
-- [ ] **依賴**：P4-02
-- [ ] **檔案**：
+- [x] **依賴**：P4-02
+- [x] **檔案**：
   - `worker/audio/voice_controller.py`（擴充：加入 `on_barge_in()` 方法）
   - `worker/session/runner.py`（擴充：暴露 `cancel_current_turn()`、`barged_in` 標記、handle CancelledError 寫 log）
   - `worker/audio/processor.py`（擴充：VAD START 在 SPEAKING 狀態觸發 barge-in）
-- [ ] **參照**：`docs/plan.md §3.2` 「打斷時的清理順序」
-- [ ] **`PipelineRunner` 變更**：
+- [x] **參照**：`docs/plan.md §3.2` 「打斷時的清理順序」
+- [x] **`PipelineRunner` 變更**：
   - 建構子初始化 `self._current_turn_task: asyncio.Task[None] | None = None`
   - `process_utterance` 函式開頭把自己的 task 綁定：`self._current_turn_task = asyncio.current_task()`
   - 新增 instance var `self._was_barged_in: bool = False`，每輪開頭重置為 False
@@ -180,7 +180,7 @@
         self._was_barged_in = True
         self._current_turn_task.cancel()
     ```
-- [ ] **`VoiceController.on_barge_in()` 規格**：
+- [x] **`VoiceController.on_barge_in()` 規格**：
   ```python
   async def on_barge_in(
       self,
@@ -200,7 +200,7 @@
       呼叫端應在 await 此函式後再 transition(LISTENING)（等 cancellation 真正完成）。
       """
   ```
-- [ ] **`AudioProcessor` 變更**：
+- [x] **`AudioProcessor` 變更**：
   - 在 `_consume_vad` 的 `START_OF_SPEECH` 分支：
     ```python
     if vc.state == VoiceState.SPEAKING:
@@ -214,38 +214,38 @@
         # 接下來這次 utterance 由後續 END_OF_SPEECH 走正常流程
     ```
   - **重要**：`on_barge_in` 是 async，VAD consumer loop 內可以 await（不會 block 其他 audio frames，因為 frame loop 在另一個 task）
-- [ ] **`process_utterance` 取消後的 transition**：
+- [x] **`process_utterance` 取消後的 transition**：
   - 在 `finally` 區塊末尾，若 `self._was_barged_in == True`：`vc.transition(LISTENING)`（讓下次 VAD START 不會被當 barge-in）
   - 否則照舊 `vc.transition(IDLE)`
-- [ ] **測試必須涵蓋**（`test_runner_errors.py` 擴充或新增 `test_barge_in.py`，至少 4 case）：
+- [x] **測試必須涵蓋**（`test_runner_errors.py` 擴充或新增 `test_barge_in.py`，至少 4 case）：
   - 用 fake LLM yield 永遠不結束 → `runner.cancel_current_turn()` → `process_utterance` 在合理時間內結束（< 100ms）
   - cancel 之後 `log_turn` 被呼叫且 `was_barged_in=True`
   - cancel 之後 `tts.clear_queue` 被呼叫一次
   - cancel 之後 `audio_source.clear_queue` 被呼叫一次
   - VoiceState 在 cancel 後最終回到 LISTENING（透過 finally）
-- [ ] **驗收**：
+- [x] **驗收**：
   - 手動測試：與 agent 對話，agent 開口後立即「啊！」打斷 → agent 應在 < 500ms 內停止
   - DB log 對應輪次 `wasBargedIn=true`
   - log 沒有 `unhandled exception` 錯誤
-- [ ] **Commit**：`feat(worker): implement barge-in cleanup sequence`
+- [x] **Commit**：`feat(worker): implement barge-in cleanup sequence` <!-- 2fbbc4d -->
 
 ---
 
 ### P4-04：動態 VAD 門檻（自說話抑制強化）
 
-- [ ] **依賴**：P4-03
-- [ ] **檔案**：
+- [x] **依賴**：P4-03
+- [x] **檔案**：
   - `worker/audio/processor.py`（擴充：在狀態進入/離開 SPEAKING 時調整門檻）
   - 可選：`worker/audio/voice_controller.py`（加入 `vad_threshold_for_state()` helper）
-- [ ] **參照**：`docs/plan.md §3.3` `vad_threshold_dynamic`
-- [ ] **策略**：
+- [x] **參照**：`docs/plan.md §3.3` `vad_threshold_dynamic`
+- [x] **策略**：
   - **P4-03 已做基本「200ms 內忽略 VAD START」軟性規則**，本 task 加強為動態門檻
   - 在 `VoiceController.on_change` 註冊 callback，狀態變更時呼叫 `vad.update_thresholds(...)`：
     | 狀態 | activation_threshold | min_speech_duration |
     |------|---------------------|---------------------|
     | 非 SPEAKING（IDLE/LISTENING/THINKING） | 0.5（預設） | 0.3 |
     | SPEAKING | 0.75 | 0.5 |
-- [ ] **實作細節**：
+- [x] **實作細節**：
   - 在 `AudioProcessor.__init__` 註冊 callback：
     ```python
     vc.on_change(self._apply_vad_thresholds)
@@ -256,30 +256,30 @@
             self._vad.update_thresholds(activation_threshold=0.5, min_speech_duration=0.3)
     ```
   - 不要在 BARGED_IN 重設門檻（避免 BARGED_IN → LISTENING 跳兩次）；只在進入/離開 SPEAKING 時調
-- [ ] **測試必須涵蓋**：
+- [x] **測試必須涵蓋**：
   - VoiceController on_change callback 在 `IDLE → LISTENING → THINKING → SPEAKING` 序列下，`vad.update_thresholds` 只被呼叫 1 次（且帶 0.75）
   - `SPEAKING → IDLE` 時被呼叫第 2 次（帶 0.5）
-- [ ] **驗收**：
+- [x] **驗收**：
   - 手動測試：把喇叭外放（不戴耳機）讓 agent 說話，自己不發聲。觀察 log 不應出現「Barge-in detected」（被 0.75 門檻擋下）
   - 反向測試：刻意說「啊」打斷，仍能正確觸發 barge-in（usermic prob > 0.75）
-- [ ] **Commit**：`feat(worker): dynamic vad threshold for self-speech suppression`
+- [x] **Commit**：`feat(worker): dynamic vad threshold for self-speech suppression` <!-- 033acc9 -->
 
 ---
 
 ### P4-05：前端 AEC 設定確認
 
-- [ ] **依賴**：無（可與 P4-01 並行）
-- [ ] **檔案**：`web/apps/playground/src/app/page.tsx`
-- [ ] **現況**：line 121、line 206 兩處已設定 `echoCancellation/noiseSuppression/autoGainControl: true`，**本 task 主要是驗證**
-- [ ] **要做**：
+- [x] **依賴**：無（可與 P4-01 並行）
+- [x] **檔案**：`web/apps/playground/src/app/page.tsx`
+- [x] **現況**：line 121、line 206 兩處已設定 `echoCancellation/noiseSuppression/autoGainControl: true`，**本 task 主要是驗證**
+- [x] **要做**：
   - 在 `getUserMedia` 與 `LiveKitRoom` 兩處 audio 設定旁加註解，標明三項都必須為 true，未來不可關閉
   - （可選）打開 Chrome DevTools `chrome://webrtc-internals/`，與 agent 對話後檢查：
     - `googEchoCancellation` 為 enabled
     - `googEchoCancellationAEC3` 為 enabled
-- [ ] **驗收**：
+- [x] **驗收**：
   - 手動：戴耳機 vs 喇叭外放各測一次，外放時不應有明顯回音觸發 barge-in（搭配 P4-04 的軟性規則）
   - codebase grep `echoCancellation` 兩處都為 true
-- [ ] **Commit**：`chore(playground): document and lock webrtc aec settings`
+- [x] **Commit**：`chore(playground): document and lock webrtc aec settings` <!-- 0bc3eb0 -->
 
 ---
 
