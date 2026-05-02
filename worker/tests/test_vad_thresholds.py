@@ -32,7 +32,7 @@ def test_entering_speaking_raises_vad_threshold() -> None:
 
     # update_thresholds should be called once with the high thresholds
     vad.update_thresholds.assert_called_once_with(
-        activation_threshold=0.75, min_speech_duration=0.5
+        activation_threshold=0.6, min_speech_duration=0.15
     )
 
 
@@ -49,10 +49,10 @@ def test_leaving_speaking_resets_vad_threshold() -> None:
     first_call = vad.update_thresholds.call_args_list[0]
     second_call = vad.update_thresholds.call_args_list[1]
     assert first_call.kwargs == {
-        "activation_threshold": 0.75,
-        "min_speech_duration": 0.5,
+        "activation_threshold": 0.6,
+        "min_speech_duration": 0.15,
     }
     assert second_call.kwargs == {
         "activation_threshold": 0.5,
-        "min_speech_duration": 0.3,
+        "min_speech_duration": 0.05,
     }

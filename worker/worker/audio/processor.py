@@ -43,13 +43,18 @@ class AudioProcessor:
         voice_controller.on_change(self._apply_vad_thresholds)
 
     def _apply_vad_thresholds(self, old: VoiceState, new: VoiceState) -> None:
+        # Silero default: activation=0.5, min_speech=0.05s.
+        # During SPEAKING, slightly raise threshold to suppress brief echo
+        # transients from TTS (browser AEC handles most of it). Keep
+        # min_speech_duration short so real speech still triggers quickly.
         if new == VoiceState.SPEAKING:
             self._vad.update_thresholds(
-                activation_threshold=0.75, min_speech_duration=0.5
+                activation_threshold=0.6, min_speech_duration=0.15
             )
         elif old == VoiceState.SPEAKING:
+            # Reset to Silero defaults exactly.
             self._vad.update_thresholds(
-                activation_threshold=0.5, min_speech_duration=0.3
+                activation_threshold=0.5, min_speech_duration=0.05
             )
 
     def _spawn(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
