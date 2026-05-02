@@ -1,4 +1,4 @@
-"""Tests for P4-03: barge-in cancellation and cleanup sequence."""
+"""Tests for barge-in cancellation and cleanup sequence."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from worker.audio.processor import AudioProcessor
 from worker.audio.voice_controller import VoiceController, VoiceState
 from worker.pipeline.memory import SlidingWindowMemory
 from worker.session.components import AgentComponents
@@ -20,10 +21,10 @@ _AUDIO = b"\x00" * 320
 def _make_tts_mock() -> MagicMock:
     tts = MagicMock()
     tts.clear_queue = MagicMock()
-    # synthesize yields nothing by default
+
     async def _empty_gen(_: str) -> object:
         return
-        yield b""  # makes it an async generator
+        yield b""
 
     tts.synthesize = _empty_gen
     return tts
@@ -94,7 +95,6 @@ def _asr_returning(text: str) -> MagicMock:
 
 
 def _llm_never_ends() -> MagicMock:
-    """LLM that yields tokens forever (cancelled externally)."""
     async def _stream(messages: object, max_tokens: object = None) -> object:  # type: ignore[no-untyped-def]
         while True:
             yield "token"
@@ -105,17 +105,17 @@ def _llm_never_ends() -> MagicMock:
     return llm
 
 
+# ── Fix 1: cancel_current_turn + generation counter ──────────────────────────
+
 @pytest.mark.asyncio
 async def test_cancel_current_turn_ends_quickly() -> None:
     runner, _, _, _, _ = _make_runner(
         asr=_asr_returning("hello"),
         llm=_llm_never_ends(),
     )
-
     task: asyncio.Task[None] = asyncio.create_task(
         runner.process_utterance(_AUDIO, "test")
     )
-    # Let pipeline reach LLM stage
     await asyncio.sleep(0.05)
     start = time.perf_counter()
     runner.cancel_current_turn()
@@ -126,12 +126,61 @@ async def test_cancel_current_turn_ends_quickly() -> None:
 
 
 @pytest.mark.asyncio
+async def test_cancel_immediately_unlocks_pipeline() -> None:
+    """cancel_current_turn must set _pipeline_busy=False before the task exits."""
+    runner, _, _, _, _ = _make_runner(
+        asr=_asr_returning("hello"),
+        llm=_llm_never_ends(),
+    )
+    task: asyncio.Task[None] = asyncio.create_task(
+        runner.process_utterance(_AUDIO, "test")
+    )
+    await asyncio.sleep(0.05)
+    assert runner._pipeline_busy is True  # pyright: ignore[reportPrivateUsage]
+    runner.cancel_current_turn()
+    # Must be False immediately, before awaiting the task.
+    assert runner._pipeline_busy is False  # pyright: ignore[reportPrivateUsage]
+    with contextlib.suppress(asyncio.CancelledError):
+        await asyncio.wait_for(task, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_old_turn_finally_does_not_reset_pipeline_busy() -> None:
+    """Generation counter: if a new turn starts, the old turn's finally must not
+    reset _pipeline_busy and drop the new turn's work."""
+    runner, _, _, _, _ = _make_runner(
+        asr=_asr_returning("hello"),
+        llm=_llm_never_ends(),
+    )
+    old_task: asyncio.Task[None] = asyncio.create_task(
+        runner.process_utterance(_AUDIO, "test")
+    )
+    await asyncio.sleep(0.05)
+
+    # Barge-in: unlock immediately and cancel old task.
+    runner.cancel_current_turn()
+    assert runner._pipeline_busy is False  # pyright: ignore[reportPrivateUsage]
+
+    # New turn starts before old task's finally block runs.
+    new_task: asyncio.Task[None] = asyncio.create_task(
+        runner.process_utterance(_AUDIO, "test2")
+    )
+    await asyncio.sleep(0)  # yield so old task's finally can run
+
+    # Old finally must NOT have reset _pipeline_busy for the new turn.
+    assert runner._pipeline_busy is True  # pyright: ignore[reportPrivateUsage]
+
+    new_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await asyncio.gather(old_task, new_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_cancel_sets_was_barged_in_in_log() -> None:
     runner, _, log_repo, _, _ = _make_runner(
         asr=_asr_returning("hello"),
         llm=_llm_never_ends(),
     )
-
     task: asyncio.Task[None] = asyncio.create_task(
         runner.process_utterance(_AUDIO, "test")
     )
@@ -141,48 +190,35 @@ async def test_cancel_sets_was_barged_in_in_log() -> None:
         await asyncio.wait_for(task, timeout=1.0)
 
     log_repo.log_turn.assert_called_once()
-    call_kwargs = log_repo.log_turn.call_args.kwargs
-    assert call_kwargs["was_barged_in"] is True
+    assert log_repo.log_turn.call_args.kwargs["was_barged_in"] is True
 
+
+# ── Fix 2: cleanup via AudioProcessor._barge_in_cleanup ──────────────────────
 
 @pytest.mark.asyncio
-async def test_cancel_calls_tts_clear_queue() -> None:
-    runner, _, _, _tts_mock, _ = _make_runner(
+async def test_barge_in_cleanup_clears_queues_and_cancels() -> None:
+    """Transitioning to BARGED_IN must clear both audio/tts queues via on_change."""
+    runner, audio_source, _, tts_mock, vc = _make_runner(
         asr=_asr_returning("hello"),
         llm=_llm_never_ends(),
     )
-
-    task: asyncio.Task[None] = asyncio.create_task(
-        runner.process_utterance(_AUDIO, "test")
-    )
-    await asyncio.sleep(0.05)
-    runner.cancel_current_turn()
-    with contextlib.suppress(asyncio.CancelledError):
-        await asyncio.wait_for(task, timeout=1.0)
-
-    # cancel_current_turn does NOT call tts.clear_queue directly;
-    # on_barge_in does. Here we test that cancel_current_turn works, and
-    # separately test on_barge_in below.
-    assert runner._was_barged_in is True  # pyright: ignore[reportPrivateUsage]
-
-
-@pytest.mark.asyncio
-async def test_on_barge_in_calls_clear_queues_and_cancels() -> None:
-    runner, audio_source, _log_repo, tts_mock, vc = _make_runner(
-        asr=_asr_returning("hello"),
-        llm=_llm_never_ends(),
-    )
-
-    task: asyncio.Task[None] = asyncio.create_task(
-        runner.process_utterance(_AUDIO, "test")
-    )
-    await asyncio.sleep(0.05)
-
-    await vc.on_barge_in(
+    vad_mock = MagicMock()
+    vad_mock.update_thresholds = MagicMock()
+    AudioProcessor(
+        vad=vad_mock,  # type: ignore[arg-type]
         runner=runner,
-        tts=tts_mock,  # type: ignore[arg-type]
-        audio_source=audio_source,  # type: ignore[arg-type]
+        voice_controller=vc,
     )
+
+    task: asyncio.Task[None] = asyncio.create_task(
+        runner.process_utterance(_AUDIO, "test")
+    )
+    await asyncio.sleep(0.05)
+
+    # Trigger cleanup via FSM transition (the new API — no direct on_barge_in call).
+    vc.transition(VoiceState.BARGED_IN)
+    # Yield so the spawned _barge_in_cleanup task can run.
+    await asyncio.sleep(0)
 
     tts_mock.clear_queue.assert_called_once()
     audio_source.clear_queue.assert_called_once()
@@ -197,17 +233,21 @@ async def test_voice_state_returns_listening_after_cancel() -> None:
         asr=_asr_returning("hello"),
         llm=_llm_never_ends(),
     )
+    vad_mock = MagicMock()
+    vad_mock.update_thresholds = MagicMock()
+    AudioProcessor(
+        vad=vad_mock,  # type: ignore[arg-type]
+        runner=runner,
+        voice_controller=vc,
+    )
 
     task: asyncio.Task[None] = asyncio.create_task(
         runner.process_utterance(_AUDIO, "test")
     )
     await asyncio.sleep(0.05)
 
-    await vc.on_barge_in(
-        runner=runner,
-        tts=tts_mock,  # type: ignore[arg-type]
-        audio_source=audio_source,  # type: ignore[arg-type]
-    )
+    vc.transition(VoiceState.BARGED_IN)
+    await asyncio.sleep(0)
 
     with contextlib.suppress(asyncio.CancelledError):
         await asyncio.wait_for(task, timeout=1.0)

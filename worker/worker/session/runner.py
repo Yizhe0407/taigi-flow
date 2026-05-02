@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from ..audio.fallback import FallbackPlayer
     from ..audio.voice_controller import VoiceController
     from ..db.repositories import InteractionLogRepository
+    from ..pipeline.tts import PiperTTS
     from .components import AgentComponents
 
 logger = logging.getLogger("worker.session.runner")
@@ -72,6 +73,7 @@ class PipelineRunner:
         self._turn_index = 0
         self._current_turn_task: asyncio.Task[None] | None = None
         self._was_barged_in: bool = False
+        self._turn_gen: int = 0
         self._asr_timeout = (
             asr_timeout
             if asr_timeout is not None
@@ -82,6 +84,14 @@ class PipelineRunner:
             if llm_total_timeout is not None
             else _parse_timeout("LLM_TOTAL_TIMEOUT", 15.0)
         )
+
+    @property
+    def audio_source(self) -> rtc.AudioSource:
+        return self._audio_source
+
+    @property
+    def tts(self) -> PiperTTS | None:
+        return self._tts
 
     async def _synthesize_to_pcm(self, taibun: str, trace_id: str) -> bytes:
         """Collect all TTS chunks into a single PCM bytes object."""
@@ -174,11 +184,13 @@ class PipelineRunner:
                 )
 
     def cancel_current_turn(self) -> None:
-        """Cancel the active pipeline turn.
-        Audio cleanup is done by VoiceController.on_barge_in."""
+        """Cancel the active pipeline turn and immediately unlock the pipeline.
+        Audio cleanup (queue clear, TTS stop) is done by AudioProcessor callback."""
         if self._current_turn_task is None or self._current_turn_task.done():
             return
         self._was_barged_in = True
+        self._turn_gen += 1        # invalidate old turn's finally-block cleanup
+        self._pipeline_busy = False  # unlock immediately so next utterance can start
         self._current_turn_task.cancel()
 
     async def process_utterance(
@@ -195,6 +207,7 @@ class PipelineRunner:
             return
         self._pipeline_busy = True
         self._was_barged_in = False
+        my_gen = self._turn_gen  # barge-in increments _turn_gen to skip our cleanup
         self._current_turn_task = asyncio.current_task()  # type: ignore[assignment]
         self._vc.transition(VoiceState.LISTENING)
         self._utterance_seq += 1
@@ -320,7 +333,9 @@ class PipelineRunner:
                         trace_id,
                         log_err,
                     )
-            self._pipeline_busy = False
+            # Only reset if no new turn has started (barge-in path sets _turn_gen).
+            if self._turn_gen == my_gen:
+                self._pipeline_busy = False
 
     async def _run_asr(self, audio_bytes: bytes, trace_id: str) -> str:
         async def _audio_gen() -> AsyncIterator[bytes]:

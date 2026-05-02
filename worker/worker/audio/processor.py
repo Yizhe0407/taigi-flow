@@ -27,6 +27,9 @@ _FALLBACK_MAX_SPEECH_SEC = 8.0
 _FALLBACK_WINDOW_SEC = 2.5
 _FORCED_WINDOW_SEC = 2.5
 _FORCED_WINDOW_RMS_THRESHOLD = 10.0
+# Single-frame probability threshold for the fast barge-in path (INFERENCE_DONE).
+# Higher than activation_threshold (0.6) to avoid triggering on brief noise.
+_BARGE_IN_PROB_THRESHOLD = 0.7
 
 
 class AudioProcessor:
@@ -40,19 +43,37 @@ class AudioProcessor:
         self._runner = runner
         self._vc = voice_controller
         self._bg_tasks: set[asyncio.Task[None]] = set()
-        voice_controller.on_change(self._apply_vad_thresholds)
+        voice_controller.on_change(self._on_vc_change)
 
-    def _apply_vad_thresholds(self, old: VoiceState, new: VoiceState) -> None:
-        # Silero default: activation=0.5, min_speech=0.05s.
-        # During SPEAKING, slightly raise threshold to suppress brief echo
-        # transients from TTS (browser AEC handles most of it). Keep
-        # min_speech_duration short so real speech still triggers quickly.
+    def _on_vc_change(self, old: VoiceState, new: VoiceState) -> None:
+        """Single on_change handler: VAD threshold adjustment + barge-in cleanup."""
+        # VAD threshold: slightly elevated during SPEAKING to suppress TTS echo.
         if new == VoiceState.SPEAKING:
             self._vad.update_thresholds(
                 activation_threshold=0.6, min_speech_duration=0.15
             )
         elif old == VoiceState.SPEAKING:
-            # Reset to Silero defaults exactly.
+            self._vad.update_thresholds(
+                activation_threshold=0.5, min_speech_duration=0.05
+            )
+        # Cleanup: triggered by the FSM transition, not by the caller.
+        if new == VoiceState.BARGED_IN:
+            self._spawn(self._barge_in_cleanup())
+
+    async def _barge_in_cleanup(self) -> None:
+        """Clear audio/TTS queues and cancel the active pipeline turn."""
+        self._runner.audio_source.clear_queue()
+        if self._runner.tts is not None:
+            self._runner.tts.clear_queue()
+        self._runner.cancel_current_turn()
+
+    # Keep as a named method so tests can still reference it directly.
+    def _apply_vad_thresholds(self, old: VoiceState, new: VoiceState) -> None:
+        if new == VoiceState.SPEAKING:
+            self._vad.update_thresholds(
+                activation_threshold=0.6, min_speech_duration=0.15
+            )
+        elif old == VoiceState.SPEAKING:
             self._vad.update_thresholds(
                 activation_threshold=0.5, min_speech_duration=0.05
             )
@@ -95,6 +116,17 @@ class AudioProcessor:
                 async for event in vad_stream:
                     if event.type == VADEventType.INFERENCE_DONE:
                         vad_inference_count += 1
+                        # Fast barge-in: don't wait for START_OF_SPEECH accumulation.
+                        # Single frame above threshold → transition immediately.
+                        # Cleanup (queue clear + cancel) fires via _on_vc_change.
+                        if (
+                            self._vc.state == VoiceState.SPEAKING
+                            and event.probability > _BARGE_IN_PROB_THRESHOLD
+                        ):
+                            logger.info(
+                                "Fast barge-in prob=%.3f", event.probability
+                            )
+                            self._vc.transition(VoiceState.BARGED_IN)
                         if vad_inference_count % 200 == 0:
                             logger.info(
                                 "VAD inference events: %s prob=%.3f speaking=%s",
@@ -110,21 +142,10 @@ class AudioProcessor:
                         fallback_buffer.clear()
                         vc_state = self._vc.state
                         if vc_state == VoiceState.SPEAKING:
-                            # Dynamic VAD threshold (0.75 set by P4-04) already
-                            # filters TTS echo at the Silero level. A time-based
-                            # guard is NOT applied here because mark_tts_output()
-                            # fires every ~20ms during playback, making
-                            # time_since_last_tts_ms always < 200ms and
-                            # permanently blocking barge-in.
-                            logger.info(
-                                "Barge-in detected (%.0fms since last tts frame)",
-                                self._vc.time_since_last_tts_ms(),
-                            )
-                            await self._vc.on_barge_in(
-                                runner=self._runner,
-                                tts=self._runner._tts,  # pyright: ignore[reportPrivateUsage]
-                                audio_source=self._runner._audio_source,  # pyright: ignore[reportPrivateUsage]
-                            )
+                            # Fast path (INFERENCE_DONE) usually fires first.
+                            # This is the fallback if fast path missed.
+                            logger.info("Barge-in via START_OF_SPEECH (fallback)")
+                            self._vc.transition(VoiceState.BARGED_IN)
                         elif vc_state in (VoiceState.LISTENING, VoiceState.THINKING):
                             logger.info(
                                 "VAD START while %s — consecutive speech",
