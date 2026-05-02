@@ -40,6 +40,17 @@ class AudioProcessor:
         self._runner = runner
         self._vc = voice_controller
         self._bg_tasks: set[asyncio.Task[None]] = set()
+        voice_controller.on_change(self._apply_vad_thresholds)
+
+    def _apply_vad_thresholds(self, old: VoiceState, new: VoiceState) -> None:
+        if new == VoiceState.SPEAKING:
+            self._vad.update_thresholds(
+                activation_threshold=0.75, min_speech_duration=0.5
+            )
+        elif old == VoiceState.SPEAKING:
+            self._vad.update_thresholds(
+                activation_threshold=0.5, min_speech_duration=0.3
+            )
 
     def _spawn(self, coro: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
         task: asyncio.Task[None] = asyncio.create_task(coro)
