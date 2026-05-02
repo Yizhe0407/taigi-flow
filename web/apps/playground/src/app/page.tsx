@@ -116,6 +116,8 @@ export default function Playground() {
         return;
       }
 
+      // AEC/NS/AGC must stay true — disabling any of these causes TTS echo to
+      // trigger barge-in (self-speech suppression relies on browser-level AEC).
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -198,6 +200,7 @@ export default function Playground() {
           </button>
         ) : connectionDetails ? (
           <div className="flex w-full flex-col gap-4">
+            {/* AEC/NS/AGC must stay true — see getUserMedia comment above. */}
             <LiveKitRoom
               token={connectionDetails.token}
               serverUrl={connectionDetails.url}
