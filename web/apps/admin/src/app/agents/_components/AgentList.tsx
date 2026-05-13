@@ -2,26 +2,25 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import type { AgentProfile } from "@taigi-flow/db";
-import { PencilLine, Trash2, ToggleLeft, ToggleRight, Plus } from "lucide-react";
+import { PencilLine, Trash2, Plus, Radio } from "lucide-react";
 
 export default function AgentList({ initial }: { initial: AgentProfile[] }) {
-  const router = useRouter();
   const [profiles, setProfiles] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
 
-  async function toggleActive(p: AgentProfile) {
+  async function activate(p: AgentProfile) {
+    if (p.isActive) return; // already active
     setBusy(p.id);
     try {
       const res = await fetch(`/api/agent-profiles/${p.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !p.isActive }),
+        body: JSON.stringify({ isActive: true }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const updated: AgentProfile = await res.json();
-      setProfiles((prev) => prev.map((x) => (x.id === updated.id ? updated : x)));
+      // Server deactivated all others — reflect locally
+      setProfiles((prev) => prev.map((x) => ({ ...x, isActive: x.id === p.id })));
     } finally {
       setBusy(null);
     }
@@ -51,28 +50,42 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
         </Link>
       </div>
 
+      <p className="text-xs text-gray-400 mb-4">同一時間只能啟用一個人格。點選未啟用的人格即可切換。</p>
+
       {profiles.length === 0 && (
         <p className="text-gray-500 text-sm">尚無 Agent 人格，請新增一個。</p>
       )}
 
-      <div className="space-y-3">
+      <div className="space-y-2">
         {profiles.map((p) => (
           <div
             key={p.id}
-            className={`flex items-center gap-4 p-4 bg-white rounded-lg border ${
-              p.isActive ? "border-gray-200" : "border-gray-100 opacity-60"
+            className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
+              p.isActive
+                ? "border-indigo-300 bg-indigo-50"
+                : "border-gray-200 bg-white opacity-70 hover:opacity-90 cursor-pointer"
             }`}
+            onClick={() => !p.isActive && !busy && activate(p)}
           >
+            {/* Radio indicator */}
+            <button
+              title={p.isActive ? "目前啟用中" : "點擊啟用"}
+              disabled={p.isActive || busy === p.id}
+              onClick={(e) => { e.stopPropagation(); activate(p); }}
+              className="shrink-0 disabled:cursor-default"
+            >
+              <Radio
+                size={20}
+                className={p.isActive ? "text-indigo-600" : "text-gray-300"}
+              />
+            </button>
+
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{p.name}</span>
-                {p.isActive ? (
-                  <span className="text-xs px-1.5 py-0.5 bg-green-100 text-green-700 rounded">
-                    啟用
-                  </span>
-                ) : (
-                  <span className="text-xs px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded">
-                    停用
+                {p.isActive && (
+                  <span className="text-xs px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded">
+                    使用中
                   </span>
                 )}
               </div>
@@ -81,15 +94,7 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
               )}
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                title={p.isActive ? "停用" : "啟用"}
-                disabled={busy === p.id}
-                onClick={() => toggleActive(p)}
-                className="text-gray-400 hover:text-indigo-600 disabled:opacity-40"
-              >
-                {p.isActive ? <ToggleRight size={22} /> : <ToggleLeft size={22} />}
-              </button>
+            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
               <Link
                 href={`/agents/${p.id}`}
                 className="text-gray-400 hover:text-blue-600"

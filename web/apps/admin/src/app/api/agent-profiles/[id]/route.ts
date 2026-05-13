@@ -19,18 +19,28 @@ export async function GET(_req: Request, { params }: Ctx): Promise<Response> {
 export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
   try {
     const input = await parseJson(req, agentProfileUpdateSchema);
-    const profile = await prisma.agentProfile.update({
-      where: { id: params.id },
-      data: {
-        ...(input.name !== undefined && { name: input.name }),
-        ...(input.description !== undefined && { description: input.description }),
-        ...(input.systemPrompt !== undefined && { systemPrompt: input.systemPrompt }),
-        ...(input.voiceConfig !== undefined && { voiceConfig: input.voiceConfig }),
-        ...(input.ragConfig !== undefined && { ragConfig: input.ragConfig ?? undefined }),
-        ...(input.tools !== undefined && { tools: input.tools }),
-        ...(input.isActive !== undefined && { isActive: input.isActive }),
-      },
+
+    const updateData = {
+      ...(input.name !== undefined && { name: input.name }),
+      ...(input.description !== undefined && { description: input.description }),
+      ...(input.systemPrompt !== undefined && { systemPrompt: input.systemPrompt }),
+      ...(input.voiceConfig !== undefined && { voiceConfig: input.voiceConfig }),
+      ...(input.ragConfig !== undefined && { ragConfig: input.ragConfig ?? undefined }),
+      ...(input.tools !== undefined && { tools: input.tools }),
+      ...(input.isActive !== undefined && { isActive: input.isActive }),
+    };
+
+    // Activating a profile → deactivate all others atomically.
+    const profile = await prisma.$transaction(async (tx) => {
+      if (input.isActive === true) {
+        await tx.agentProfile.updateMany({
+          where: { id: { not: params.id } },
+          data: { isActive: false },
+        });
+      }
+      return tx.agentProfile.update({ where: { id: params.id }, data: updateData });
     });
+
     return ok(profile);
   } catch (err) {
     return handleError(err);
