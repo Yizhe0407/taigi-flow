@@ -116,7 +116,12 @@ async def entrypoint(ctx: JobContext) -> None:
 
 
 def main() -> None:
-    load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+    # override=True ensures .env takes precedence over any stale shell env vars
+    # (e.g. PIPER_TTS_API_URL / PIPER_TTS_VOICE set in a previous session).
+    load_dotenv(
+        dotenv_path=os.path.join(os.path.dirname(__file__), "..", "..", ".env"),
+        override=True,
+    )
     cli.run_app(
         WorkerOptions(
             entrypoint_fnc=entrypoint,
