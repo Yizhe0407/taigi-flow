@@ -6,6 +6,7 @@
     "strict": true,
     "esModuleInterop": true,
     "module": "commonjs",
+    "noEmit": true,
     "rootDir": ".",
     "skipLibCheck": true,
     "outDir": "dist"

@@ -10,9 +10,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@taigi-flow/db": "workspace:*",
+    "@taigi-flow/types": "workspace:*",
+    "dotenv": "^16.4.7",
     "next": "^14.2.29",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@types/node": "^20.17.57",
