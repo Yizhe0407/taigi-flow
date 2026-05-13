@@ -6,8 +6,8 @@
 
 - **原生台語互動**：使用 Qwen3-ASR / Breeze-ASR-26 + 自訓 Piper TTS
 - **低延遲串流**：目標首次音訊延遲 < 1.2s
-- **擬真打斷機制**：完整 Barge-in + AEC 實作
-- **多人格管理**：透過後台熱更新 Agent 人格與發音字典
+- **擬真打斷機制**：完整 Barge-in + VAD 抑制實作
+- **多人格管理**：透過管理後台熱更新 Agent 人格與發音字典
 - **可觀測**：每通對話的完整文字轉換鏈可追溯、可修正
 
 ## 架構總覽
@@ -19,6 +19,8 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
                                        HanloFlow → Taibun → Piper TTS
                                                     ↓
                                           PostgreSQL + pgvector
+                                                    ↑
+                                         Admin Panel (Next.js :3001)
 ```
 
 詳細架構見 [`docs/plan.md`](docs/plan.md#1-系統架構總覽)。
@@ -28,8 +30,8 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 - **語音**：LiveKit (WebRTC)、Silero VAD、Qwen3-ASR、Piper TTS
 - **文字處理**：[HanloFlow](https://github.com/Yizhe0407/HanloFlow)、[Taibun](https://github.com/andreihar/taibun)
 - **後端**：Python 3.12、`uv`
-- **前端**：Next.js (Monorepo)、pnpm、shadcn/ui
-- **資料**：PostgreSQL + pgvector、Prisma ORM
+- **前端**：Next.js 14 (Monorepo)、pnpm、Tailwind CSS、lucide-react
+- **資料**：PostgreSQL + pgvector、Prisma ORM、zod
 - **部署**：Docker Compose
 
 ## 快速開始
@@ -79,23 +81,37 @@ DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system
   uv run pytest tests/ -v
 cd ..
 
-# 8. 啟動語音流程（Phase 2）
-cd web && pnpm --filter playground dev
-# 另開一個終端
+# 8. 啟動前端服務（兩個終端）
+cd web && pnpm --filter playground dev   # 對話介面 :3000
+cd web && pnpm --filter admin dev        # 管理後台 :3001
+
+# 9. 啟動 Worker（另開終端）
 cd worker
 uv run python -m worker.main dev
 ```
 
 ### 服務一覽
 
-| 服務 | URL |
-|------|-----|
-| Playground | http://localhost:3000 |
-| Admin | http://localhost:3001 |
-| LiveKit | ws://localhost:7880 |
-| PostgreSQL | localhost:5432 / DB: `agent_system` |
-| Redis | localhost:6379 |
-| Cloudbeaver（DB UI）| http://localhost:8978 |
+| 服務 | URL | 說明 |
+|------|-----|------|
+| Playground | http://localhost:3000 | 使用者語音對話介面 |
+| Admin | http://localhost:3001 | 管理後台 |
+| LiveKit | ws://localhost:7880 | WebRTC 媒體伺服器 |
+| PostgreSQL | localhost:5432 / DB: `agent_system` | 主資料庫 |
+| Redis | localhost:6379 | LiveKit 佇列 |
+| Cloudbeaver（DB UI）| http://localhost:8978 | 資料庫瀏覽器 |
+
+### 管理後台（Admin :3001）
+
+後台提供四個頁面：
+
+| 路徑 | 功能 |
+|------|------|
+| `/agents` | Agent 人格列表、新增、編輯、啟用/停用 |
+| `/sessions` | 對話 session 列表（最近 100） |
+| `/sessions/:id` | 逐 turn 四欄對照（ASR / LLM / HanLo / Taibun）+ 篩選 + 一鍵加入字典 |
+| `/dictionary` | 全域 / Agent 專屬發音字典，支援搜尋、inline 編輯、CSV 匯入/匯出 |
+| `/monitor` | 即時監控（active sessions、首音延遲、錯誤率，每 10s 輪詢） |
 
 ### Playground 測試方式（重要）
 
@@ -189,17 +205,17 @@ LLM_MODEL="llama3.2" \
 ├── CLAUDE.md                  # AI 開發助手工作規則
 ├── docs/
 │   ├── plan.md               # 完整設計文件
-│   ├── adr/                  # 架構決策紀錄
+│   ├── adr/                  # 架構決策紀錄（001-004）
 │   └── phase-1-report.md     # Phase 1 完成報告
-├── tasks/                     # 分階段任務清單
+├── tasks/                     # 分階段任務清單（含完成記錄）
 ├── web/                       # Next.js Monorepo (pnpm)
 │   ├── apps/playground/      # 使用者對話介面 :3000
-│   ├── apps/admin/           # 管理後台 :3001
+│   ├── apps/admin/           # 管理後台 :3001（Tailwind + lucide-react）
 │   └── packages/
-│       ├── db/               # Prisma schema + migrations
-│       ├── types/            # 共用 zod schema
-│       ├── ui/               # 共用元件
-│       └── api-client/       # 後端 API 封裝
+│       ├── db/               # Prisma schema + migrations + 單例 client
+│       ├── types/            # 共用 zod schema（API 輸入驗證）
+│       ├── ui/               # 共用元件（待用）
+│       └── api-client/       # 後端 API 封裝（待用）
 └── worker/                    # Agent Worker (Python + uv)
     ├── worker/
     │   ├── session/          # 對話協調層（AgentComponents + PipelineRunner）
@@ -218,10 +234,10 @@ LLM_MODEL="llama3.2" \
 |-------|------|------|
 | 0 | 基礎設施 | ✅ 完成 |
 | 1 | 純文字對話鏈（CLI）| ✅ 完成 |
-| 2 | 語音層接入 + ASR A/B 評估 | 🔲 |
-| 3 | 完整迴圈整合 | 🔲 |
-| 4 | Barge-in + AEC | 🔲 |
-| 5 | 管理後台 | 🔲 |
+| 2 | 語音層接入 + ASR A/B 評估 | ✅ 完成 |
+| 3 | 完整迴圈整合 | ✅ 完成 |
+| 4 | Barge-in + VAD 抑制 | ✅ 完成 |
+| 5 | 管理後台 | ✅ 完成 |
 | 6 | RAG + Tools | 🔲 |
 | 7 | 打磨與文件 | 🔲 |
 
