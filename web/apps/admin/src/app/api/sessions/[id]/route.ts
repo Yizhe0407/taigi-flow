@@ -3,15 +3,16 @@ import { handleError, ok } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-type Ctx = { params: { id: string } };
+type Ctx = { params: Promise<{ id: string }> };
 
 export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> {
   try {
+    const { id } = await params;
     await prisma.$transaction([
-      prisma.interactionLog.deleteMany({ where: { sessionId: params.id } }),
-      prisma.session.delete({ where: { id: params.id } }),
+      prisma.interactionLog.deleteMany({ where: { sessionId: id } }),
+      prisma.session.delete({ where: { id } }),
     ]);
-    return ok({ deleted: params.id });
+    return ok({ deleted: id });
   } catch (err) {
     return handleError(err);
   }
