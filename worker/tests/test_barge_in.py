@@ -231,7 +231,7 @@ async def test_barge_in_cleanup_clears_queues_and_cancels() -> None:
 
 @pytest.mark.asyncio
 async def test_voice_state_returns_listening_after_cancel() -> None:
-    runner, audio_source, _, tts_mock, vc = _make_runner(
+    runner, _audio_source, _, _tts_mock, vc = _make_runner(
         asr=_asr_returning("hello"),
         llm=_llm_never_ends(),
     )
