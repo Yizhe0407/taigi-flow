@@ -41,54 +41,61 @@ Browser (Next.js) ←WebRTC→ LiveKit Server ←→ Agent Worker (Python)
 - [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - [pnpm](https://pnpm.io/installation) v10+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (Python 套件管理)
+- [tmux](https://github.com/tmux/tmux) — `brew install tmux`
 - Node.js 20+
 - Python 3.12+
 
-### 步驟
+### 首次設定
 
 ```bash
 # 1. Clone 專案
 git clone <repo-url>
 cd taigi-flow
 
-# 2. 複製並編輯環境變數
+# 2. 複製並填入環境變數
 cp .env.example .env
 # 填入：POSTGRES_PASSWORD、LIVEKIT_API_KEY、LIVEKIT_API_SECRET
 
-# 3. 啟動基礎設施（postgres / redis / livekit / cloudbeaver）
-docker compose up -d
-docker compose ps   # 確認全部 healthy
-
-# 4. 安裝前端依賴
+# 3. 安裝前端依賴
 cd web && pnpm install && cd ..
 
-# 5. 執行 DB migration + seed
+# 4. 安裝 Worker 依賴（含 HanloFlow）
+cd worker && uv sync --dev && cd ..
+
+# 5. 初始化資料庫（首次執行）
 cd web/packages/db
 DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
   pnpm exec prisma migrate deploy
 DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
   pnpm exec prisma db seed
 cd ../../..
-
-# 6. 安裝 Worker 依賴（含 HanloFlow）
-cd worker
-uv sync --dev
-cd ..
-
-# 7. 驗證 Worker 能連上 DB
-cd worker
-DATABASE_URL="postgresql://admin:<POSTGRES_PASSWORD>@localhost:5432/agent_system" \
-  uv run pytest tests/ -v
-cd ..
-
-# 8. 啟動前端服務（兩個終端）
-cd web && pnpm --filter playground dev   # 對話介面 :3000
-cd web && pnpm --filter admin dev        # 管理後台 :3001
-
-# 9. 啟動 Worker（另開終端）
-cd worker
-uv run python -m worker.main dev
 ```
+
+### 一鍵啟動
+
+設定完成後，每次開發只需：
+
+```bash
+./dev.sh
+```
+
+腳本會自動：
+1. 啟動 Docker 基礎設施（postgres / redis / livekit）
+2. 等待 PostgreSQL 就緒
+3. 套用 pending DB migrations
+4. 開啟 tmux session，三個 pane 分別跑 Playground / Admin / Worker
+
+```
+┌──────────────────────┬───────────────────────┐
+│  Playground :3000    │  Admin :3001           │
+├──────────────────────┴───────────────────────┤
+│  Worker (Python)                             │
+└──────────────────────────────────────────────┘
+```
+
+tmux 操作：`Ctrl+B 方向鍵` 切換 pane、`Ctrl+B z` 最大化、`Ctrl+B d` detach。
+
+選項：`./dev.sh --no-worker`（只起前端，不啟動 Python Worker）
 
 ### 服務一覽
 
