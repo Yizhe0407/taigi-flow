@@ -43,7 +43,7 @@ async def test_repository_get_active_profile_exists(session: AsyncSession) -> No
     result = await session.execute(
         select(AgentProfile).where(AgentProfile.isActive.is_(True))  # type: ignore[arg-type]
     )
-    profile = result.scalar_one_or_none()
+    profile = result.scalars().first()
     assert profile is not None, "Expected at least one active AgentProfile"
 
     repo = AgentProfileRepository(session)

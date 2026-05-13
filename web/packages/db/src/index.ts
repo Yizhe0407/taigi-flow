@@ -26,12 +26,26 @@ function createPrismaClient(): PrismaClient {
   );
 }
 
-export const prisma: PrismaClient =
-  globalThis.__taigiFlowPrisma ?? createPrismaClient();
+// Lazy init: defer createPrismaClient() until first property access so that
+// importing this module during Next.js build-time page collection (worker_threads
+// without inherited env) does not throw before any DB call is made.
+let _instance: PrismaClient | undefined;
 
-if (process.env.NODE_ENV !== "production") {
-  globalThis.__taigiFlowPrisma = prisma;
+function getClient(): PrismaClient {
+  if (!_instance) {
+    _instance = globalThis.__taigiFlowPrisma ?? createPrismaClient();
+    if (process.env.NODE_ENV !== "production") {
+      globalThis.__taigiFlowPrisma = _instance;
+    }
+  }
+  return _instance;
 }
+
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_, prop) {
+    return Reflect.get(getClient(), prop as string);
+  },
+}) as PrismaClient;
 
 export type {
   AgentProfile,
