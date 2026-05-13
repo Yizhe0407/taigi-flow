@@ -1,8 +1,5 @@
+import { redirect } from "next/navigation";
+
 export default function Home() {
-  return (
-    <main>
-      <h1>Taigi Flow – Admin</h1>
-      <p>Hello World</p>
-    </main>
-  );
+  redirect("/agents");
 }
