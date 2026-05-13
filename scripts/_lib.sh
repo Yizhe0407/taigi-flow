@@ -50,12 +50,12 @@ kill_port() {
   local pids
   pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
   if [[ -n "$pids" ]]; then
-    echo "🔪  清除 port $port 上的舊程序（PID: $pids）…"
-    echo "$pids" | xargs kill -TERM 2>/dev/null || true
+    echo "清除 port ${port} 上的舊程序 (PID: ${pids})"
+    echo "${pids}" | xargs kill -TERM 2>/dev/null || true
     sleep 1
     # 強制殺掉還在的
-    pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
-    [[ -n "$pids" ]] && echo "$pids" | xargs kill -KILL 2>/dev/null || true
+    pids=$(lsof -ti tcp:"${port}" 2>/dev/null || true)
+    [[ -n "${pids}" ]] && echo "${pids}" | xargs kill -KILL 2>/dev/null || true
   fi
 }
 
