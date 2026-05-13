@@ -1,5 +1,6 @@
 import asyncio
 import io
+import logging
 import os
 import unicodedata
 import wave
@@ -10,6 +11,8 @@ import aiohttp
 import numpy as np
 from piper.config import SynthesisConfig
 from piper.voice import PiperVoice
+
+logger = logging.getLogger("worker.pipeline.tts")
 
 
 def _read_float_env(name: str, default: float) -> float:
@@ -114,6 +117,11 @@ class PiperTTS:
         normalized_text = self._normalize_tts_input(taibun_text)
         if not normalized_text:
             return b""
+
+        logger.info(
+            "TTS HTTP → %s  voice=%s  text=%r",
+            self.api_url, self.api_voice, normalized_text[:80],
+        )
 
         # Piper http_server native format:
         # - text (not input), voice, noise_scale, noise_w_scale (not noise_scale_w)
