@@ -23,7 +23,6 @@ done
 # ── 1. 檢查 & 環境 ────────────────────────────────────────────────────────────
 check_prereqs
 
-# 優先用 .env.prod
 ENV_FILE="$ROOT/.env"
 if [[ -f "$ROOT/.env.prod" ]]; then
   ENV_FILE="$ROOT/.env.prod"
@@ -39,46 +38,45 @@ kill_web_ports
 
 # ── 4. Next.js Build ──────────────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == "false" ]]; then
-  echo "🔨  建置 Next.js（Playground + Admin）…"
+  echo "building Next.js (Playground + Admin)..."
   cd "$ROOT/web"
   pnpm --filter playground build 2>&1 | tail -5
   pnpm --filter admin build 2>&1 | tail -5
   cd "$ROOT"
-  echo "    建置完成 ✓"
+  echo "build complete"
 else
-  echo "⏭️   略過建置（--skip-build）"
+  echo "skipping build (--skip-build)"
 fi
 
 # ── 5. tmux session ───────────────────────────────────────────────────────────
 kill_existing_session "$SESSION"
-echo "🖥️   建立 tmux session '$SESSION'（正式模式）…"
+echo "building tmux session '${SESSION}' (prod mode)..."
 
-# Layout:
-#  ┌─────────────────────┬─────────────────────┐
-#  │  Playground :3000   │  Admin :3001         │
-#  ├─────────────────────┴─────────────────────┤
-#  │  Worker（start 穩定模式）                  │
-#  └────────────────────────────────────────────┘
-
+# Pane 0: Playground
 tmux new-session -d -s "$SESSION" -x 220 -y 50 \
-  -e "DATABASE_URL=$DATABASE_URL" \
+  -e "DATABASE_URL=${DATABASE_URL}" \
   -c "$ROOT/web"
-tmux send-keys -t "$SESSION:0.0" "pnpm --filter playground start -p 3000" Enter
+sleep 0.3
+tmux send-keys -t "${SESSION}:0.0" "pnpm --filter playground start -p 3000" Enter
 
-tmux split-window -t "$SESSION:0.0" -h \
-  -e "DATABASE_URL=$DATABASE_URL" \
-  -c "$ROOT/web"
-tmux send-keys -t "$SESSION:0.1" "pnpm --filter admin start -p 3001" Enter
+# Pane 1: Admin
+ADMIN_PANE=$(tmux split-window -t "${SESSION}:0.0" -h -P -F "#{pane_id}" \
+  -e "DATABASE_URL=${DATABASE_URL}" \
+  -c "$ROOT/web")
+sleep 0.3
+tmux send-keys -t "${ADMIN_PANE}" "pnpm --filter admin start -p 3001" Enter
 
+# Pane 2: Worker
 if [[ "$NO_WORKER" == "false" ]]; then
-  tmux split-window -t "$SESSION:0.0" -v \
-    -e "DATABASE_URL=$DATABASE_URL" \
-    -c "$ROOT/worker"
-  tmux send-keys -t "$SESSION:0.2" "uv run python -m worker.main start" Enter
-  tmux resize-pane -t "$SESSION:0.2" -y "40%"
-  tmux select-pane -t "$SESSION:0.2"
+  WORKER_PANE=$(tmux split-window -t "${SESSION}:0.0" -v -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  sleep 0.3
+  tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main start" Enter
+  tmux resize-pane -t "${WORKER_PANE}" -y 15
+  tmux select-pane -t "${WORKER_PANE}"
 else
-  tmux select-pane -t "$SESSION:0.0"
+  tmux select-pane -t "${SESSION}:0.0"
 fi
 
 # ── 6. Attach ─────────────────────────────────────────────────────────────────

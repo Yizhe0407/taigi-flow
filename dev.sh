@@ -28,7 +28,7 @@ kill_web_ports
 
 # ── 4. tmux session ───────────────────────────────────────────────────────────
 kill_existing_session "$SESSION"
-echo "🖥️   建立 tmux session '$SESSION'（開發模式）…"
+echo "building tmux session '${SESSION}' (dev mode)..."
 
 # Layout:
 #  ┌─────────────────────┬─────────────────────┐
@@ -37,27 +37,33 @@ echo "🖥️   建立 tmux session '$SESSION'（開發模式）…"
 #  │  Worker（dev 自動重載）                    │
 #  └────────────────────────────────────────────┘
 
+# Pane 0: Playground
 tmux new-session -d -s "$SESSION" -x 220 -y 50 \
-  -e "DATABASE_URL=$DATABASE_URL" \
+  -e "DATABASE_URL=${DATABASE_URL}" \
   -c "$ROOT/web"
-tmux send-keys -t "$SESSION:0.0" "pnpm --filter playground dev" Enter
+sleep 0.3
+tmux send-keys -t "${SESSION}:0.0" "pnpm --filter playground dev" Enter
 
-tmux split-window -t "$SESSION:0.0" -h \
-  -e "DATABASE_URL=$DATABASE_URL" \
-  -c "$ROOT/web"
-tmux send-keys -t "$SESSION:0.1" "pnpm --filter admin dev" Enter
+# Pane 1: Admin（水平切右側）
+ADMIN_PANE=$(tmux split-window -t "${SESSION}:0.0" -h -P -F "#{pane_id}" \
+  -e "DATABASE_URL=${DATABASE_URL}" \
+  -c "$ROOT/web")
+sleep 0.3
+tmux send-keys -t "${ADMIN_PANE}" "pnpm --filter admin dev" Enter
 
+# Pane 2: Worker（從 pane 0 垂直切下）
 if [[ "$NO_WORKER" == "false" ]]; then
-  tmux split-window -t "$SESSION:0.0" -v \
-    -e "DATABASE_URL=$DATABASE_URL" \
-    -c "$ROOT/worker"
-  tmux send-keys -t "$SESSION:0.2" "uv run python -m worker.main dev" Enter
-  tmux resize-pane -t "$SESSION:0.2" -y "40%"
-  tmux select-pane -t "$SESSION:0.2"
+  WORKER_PANE=$(tmux split-window -t "${SESSION}:0.0" -v -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  sleep 0.3
+  tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main dev" Enter
+  tmux resize-pane -t "${WORKER_PANE}" -y 15
+  tmux select-pane -t "${WORKER_PANE}"
 else
-  tmux select-pane -t "$SESSION:0.0"
+  tmux select-pane -t "${SESSION}:0.0"
 fi
 
-# ── 4. Attach ─────────────────────────────────────────────────────────────────
+# ── 5. Attach ─────────────────────────────────────────────────────────────────
 print_ready_msg "$SESSION" "DEV"
 tmux attach-session -t "$SESSION"
