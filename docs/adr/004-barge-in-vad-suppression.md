@@ -1,6 +1,6 @@
 # ADR 004：Barge-in 自說話抑制策略
 
-**狀態**：已採用（Phase 4，2026-05-02）
+**狀態**：已採用（Phase 4，2026-05-02，修訂 2026-05-02）
 
 ---
 
@@ -43,13 +43,14 @@ SPEAKING 時：activation_threshold=0.75, min_speech_duration=500ms
 
 | 狀態 | activation_threshold | min_speech_duration |
 |------|---------------------|---------------------|
-| SPEAKING | **0.60** | **0.15s** |
-| 其他（離開 SPEAKING 後）| 0.50（Silero 預設）| 0.05s（Silero 預設）|
+| THINKING 或 SPEAKING（「忙碌中」）| **0.60** | **0.15s** |
+| 其他（離開忙碌狀態後）| 0.50（Silero 預設）| 0.05s（Silero 預設）|
 
 **理由**：
 - 0.60 高於有 browser AEC 後的典型 TTS 回音 prob（< 0.40），但低於使用者語音 prob（0.65+）
-- 0.15s 比預設（0.05s）長 3 倍，可過濾短暫雜音，但對真實語音影響很小（約 150ms 累積時間）
-- 離開 SPEAKING 後回到 Silero 原始預設，不殘留較嚴格的設定
+- 0.15s 比預設（0.05s）長 3 倍，可過濾短暫雜音（如咳嗽），但對真實語音影響很小
+- THINKING 期間無 TTS 播放，不需回音抑制，但仍需 0.15s 累積時間防止偶發雜音取消 LLM 生成
+- 離開忙碌狀態後回到 Silero 原始預設，不殘留較嚴格的設定
 
 ---
 
@@ -68,9 +69,20 @@ autoGainControl: true,
 
 ---
 
+## 決策三：Barge-in 觸發狀態擴展至 THINKING
+
+**初始實作**僅在 `SPEAKING` 狀態觸發 barge-in。但 FSM 的 `_TRANSITIONS` 表明 `THINKING → BARGED_IN` 是合法轉換，代表原始設計就預期支援此路徑。
+
+**問題**：使用者在 LLM 生成期間說話（`THINKING` 狀態，尚無 TTS 輸出），VAD 事件被靜默忽略。`_pipeline_busy = True` 導致 `END_OF_SPEECH` 後的新 utterance 被丟棄，使用者必須等 agent 說完才能再次說話。
+
+**實際採用**：INFERENCE_DONE 快速路徑和 START_OF_SPEECH fallback 都在 `SPEAKING` 和 `THINKING` 狀態觸發 `transition(BARGED_IN)`。VAD 動態門檻也同步提升至兩個狀態（見決策二修訂）。
+
+---
+
 ## 後果
 
-- Barge-in 恢復正常運作（VAD START_OF_SPEECH 可在使用者說話後 ~150ms 觸發）
+- Barge-in 恢復正常運作（INFERENCE_DONE 快速路徑在 ~64ms 內觸發；START_OF_SPEECH fallback 在 ~150ms 後觸發）
+- THINKING 和 SPEAKING 期間都有 0.6/0.15s 門檻保護，防止雜音意外打斷
 - 移除時間門檻後，自說話抑制完全依賴 VAD 動態門檻 + browser AEC
 - 若未來發現喇叭外放仍有誤觸發，可微調 `activation_threshold`（0.60 → 0.65），不需要恢復時間門檻
 
