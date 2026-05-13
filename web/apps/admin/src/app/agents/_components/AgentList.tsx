@@ -4,13 +4,16 @@ import { useState } from "react";
 import Link from "next/link";
 import type { AgentProfile } from "@taigi-flow/db";
 import { PencilLine, Trash2, Plus, Radio } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export default function AgentList({ initial }: { initial: AgentProfile[] }) {
   const [profiles, setProfiles] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
 
   async function activate(p: AgentProfile) {
-    if (p.isActive) return; // already active
+    if (p.isActive) return;
     setBusy(p.id);
     try {
       const res = await fetch(`/api/agent-profiles/${p.id}`, {
@@ -19,7 +22,6 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
         body: JSON.stringify({ isActive: true }),
       });
       if (!res.ok) throw new Error(await res.text());
-      // Server deactivated all others — reflect locally
       setProfiles((prev) => prev.map((x) => ({ ...x, isActive: x.id === p.id })));
     } finally {
       setBusy(null);
@@ -42,78 +44,72 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Agent 人格管理</h1>
-        <Link
-          href="/agents/new"
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm rounded hover:bg-indigo-700"
-        >
+        <Link href="/agents/new" className={cn(buttonVariants(), "gap-1.5")}>
           <Plus size={16} /> 新增人格
         </Link>
       </div>
 
-      <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
         <span>同一時間只能啟用一個人格。</span>
-        <span className="text-gray-300">·</span>
-        <span>切換後，<strong className="text-gray-500">下次使用者重新連線</strong>時自動套用新人格（不須重啟腳本）。</span>
+        <span>·</span>
+        <span>切換後，<strong>下次使用者重新連線</strong>時自動套用新人格（不須重啟腳本）。</span>
       </div>
 
       {profiles.length === 0 && (
-        <p className="text-gray-500 text-sm">尚無 Agent 人格，請新增一個。</p>
+        <p className="text-muted-foreground text-sm">尚無 Agent 人格，請新增一個。</p>
       )}
 
       <div className="space-y-2">
         {profiles.map((p) => (
           <div
             key={p.id}
-            className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
+            className={cn(
+              "flex items-center gap-4 p-4 rounded-lg border transition-colors",
               p.isActive
-                ? "border-indigo-300 bg-indigo-50"
-                : "border-gray-200 bg-white opacity-70 hover:opacity-90 cursor-pointer"
-            }`}
+                ? "border-primary/40 bg-primary/5"
+                : "border-border bg-card opacity-70 hover:opacity-90 cursor-pointer",
+            )}
             onClick={() => !p.isActive && !busy && activate(p)}
           >
-            {/* Radio indicator */}
-            <button
+            <Button
               title={p.isActive ? "目前啟用中" : "點擊啟用"}
               disabled={p.isActive || busy === p.id}
-              onClick={(e) => { e.stopPropagation(); activate(p); }}
-              className="shrink-0 disabled:cursor-default"
+              variant="ghost"
+              size="icon-sm"
+              onClick={(e) => { e.stopPropagation(); void activate(p); }}
+              className="shrink-0"
             >
-              <Radio
-                size={20}
-                className={p.isActive ? "text-indigo-600" : "text-gray-300"}
-              />
-            </button>
+              <Radio size={20} className={p.isActive ? "text-primary" : "text-muted-foreground"} />
+            </Button>
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{p.name}</span>
-                {p.isActive && (
-                  <span className="text-xs px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded">
-                    使用中
-                  </span>
-                )}
+                {p.isActive && <Badge variant="secondary">使用中</Badge>}
               </div>
               {p.description && (
-                <p className="text-sm text-gray-500 mt-0.5 truncate">{p.description}</p>
+                <p className="text-sm text-muted-foreground mt-0.5 truncate">{p.description}</p>
               )}
             </div>
 
-            <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
               <Link
                 href={`/agents/${p.id}`}
-                className="text-gray-400 hover:text-blue-600"
                 title="編輯"
+                className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
               >
-                <PencilLine size={18} />
+                <PencilLine size={16} />
               </Link>
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 title="刪除"
                 disabled={busy === p.id}
-                onClick={() => deleteProfile(p)}
-                className="text-gray-400 hover:text-red-500 disabled:opacity-40"
+                onClick={() => void deleteProfile(p)}
+                className="text-muted-foreground hover:text-destructive"
               >
-                <Trash2 size={18} />
-              </button>
+                <Trash2 size={16} />
+              </Button>
             </div>
           </div>
         ))}

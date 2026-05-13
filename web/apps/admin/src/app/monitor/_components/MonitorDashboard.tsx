@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -142,6 +144,7 @@ export default function MonitorDashboard() {
           color={!stats ? "gray" : stats.errorRate === 0 ? "green" : stats.errorRate < 5 ? "yellow" : "red"} />
       </div>
 
+
       {/* Live feed */}
       <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
         對話串流
@@ -188,8 +191,8 @@ function TurnCard({ turn }: { turn: ConversationTurn }) {
             進行中
           </span>
         )}
-        {turn.wasBargedIn && <Tag color="amber" label="打斷" />}
-        {turn.errorFlag && <Tag color="red" label={turn.errorFlag} title={turn.errorFlag} />}
+        {turn.wasBargedIn && <Badge variant="outline" className="text-amber-600 border-amber-300 text-xs">打斷</Badge>}
+        {turn.errorFlag && <Badge variant="outline" className="text-destructive border-destructive/30 text-xs cursor-help" title={turn.errorFlag}>{turn.errorFlag}</Badge>}
 
         {/* Latencies — right aligned */}
         <div className="ml-auto flex items-center gap-3 text-xs">
@@ -262,30 +265,21 @@ function Latency({ label, ms }: { label: string; ms: number }) {
   );
 }
 
-function Tag({ label, color, title }: { label: string; color: "amber" | "red"; title?: string }) {
-  const cls = color === "amber"
-    ? "bg-amber-100 text-amber-700"
-    : "bg-red-100 text-red-700";
-  return (
-    <span title={title} className={`text-xs px-1.5 py-0.5 rounded ${cls} cursor-default`}>
-      {label}
-    </span>
-  );
-}
-
 type Color = "green" | "yellow" | "red" | "gray";
 const COLOR_CARD: Record<Color, string> = {
-  green: "border-green-200 bg-green-50 text-green-800",
-  yellow: "border-yellow-200 bg-yellow-50 text-yellow-800",
-  red: "border-red-200 bg-red-50 text-red-800",
-  gray: "border-gray-200 bg-white text-gray-700",
+  green: "text-green-800",
+  yellow: "text-yellow-800",
+  red: "text-red-800",
+  gray: "text-muted-foreground",
 };
 
 function StatCard({ label, value, color }: { label: string; value: string; color: Color }) {
   return (
-    <div className={`p-4 border rounded-lg ${COLOR_CARD[color]}`}>
-      <div className="text-xs font-medium opacity-60 mb-1">{label}</div>
-      <div className="text-2xl font-bold tabular-nums">{value}</div>
-    </div>
+    <Card className={COLOR_CARD[color]}>
+      <CardContent className="pt-4">
+        <div className="text-xs font-medium opacity-60 mb-1">{label}</div>
+        <div className="text-2xl font-bold tabular-nums">{value}</div>
+      </CardContent>
+    </Card>
   );
 }

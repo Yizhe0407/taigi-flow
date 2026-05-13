@@ -3,6 +3,18 @@
 import { useState, useRef } from "react";
 import type { PronunciationEntry } from "@taigi-flow/db";
 import { Trash2, Pencil, Plus, Download, Upload, Check, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type Agent = { id: string; name: string };
 
@@ -11,10 +23,8 @@ type Props = {
   agents: Agent[];
 };
 
-type Tab = "global" | string; // profileId or "global"
-
 export default function DictionaryManager({ globalEntries, agents }: Props) {
-  const [tab, setTab] = useState<Tab>("global");
+  const [tab, setTab] = useState<string>("global");
   const [entries, setEntries] = useState<Record<string, PronunciationEntry[]>>({
     global: globalEntries,
   });
@@ -35,12 +45,12 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
     return e.term.toLowerCase().includes(q) || e.replacement.toLowerCase().includes(q);
   });
 
-  async function loadTab(t: Tab) {
+  async function handleTabChange(t: string) {
     setTab(t);
     if (loadedTabs.has(t)) return;
     const pid = t === "global" ? "global" : t;
     const res = await fetch(`/api/dictionary?profileId=${pid}`);
-    const data = await res.json();
+    const data = await res.json() as { items: PronunciationEntry[] };
     setEntries((prev) => ({ ...prev, [t]: data.items }));
     setLoadedTabs((prev) => new Set(prev).add(t));
   }
@@ -61,11 +71,8 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const entry: PronunciationEntry = await res.json();
-      setEntries((prev) => ({
-        ...prev,
-        [tab]: [entry, ...(prev[tab] ?? [])],
-      }));
+      const entry = await res.json() as PronunciationEntry;
+      setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
       setAdding(false);
       setNewForm({ term: "", replacement: "", priority: "0", note: "" });
     } finally {
@@ -87,7 +94,7 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
         }),
       });
       if (!res.ok) throw new Error(await res.text());
-      const updated: PronunciationEntry = await res.json();
+      const updated = await res.json() as PronunciationEntry;
       setEntries((prev) => ({
         ...prev,
         [tab]: (prev[tab] ?? []).map((e) => (e.id === updated.id ? updated : e)),
@@ -150,11 +157,8 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
         }),
       });
       if (res.ok) {
-        const entry: PronunciationEntry = await res.json();
-        setEntries((prev) => ({
-          ...prev,
-          [tab]: [entry, ...(prev[tab] ?? [])],
-        }));
+        const entry = await res.json() as PronunciationEntry;
+        setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
         imported++;
       }
     }
@@ -168,209 +172,179 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">發音字典</h1>
         <div className="flex gap-2">
-          <button
-            onClick={exportCsv}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50"
-          >
+          <Button variant="outline" size="sm" onClick={exportCsv}>
             <Download size={14} /> 匯出 CSV
-          </button>
-          <button
-            onClick={() => fileRef.current?.click()}
-            disabled={busy}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-          >
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
             <Upload size={14} /> 批次匯入
-          </button>
+          </Button>
           <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importCsv} />
-          <button
-            onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700"
-          >
+          <Button size="sm" onClick={() => setAdding(true)}>
             <Plus size={14} /> 新增
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-4 border-b border-gray-200">
-        <TabBtn active={tab === "global"} onClick={() => loadTab("global")}>
-          全域
-        </TabBtn>
-        {agents.map((a) => (
-          <TabBtn key={a.id} active={tab === a.id} onClick={() => loadTab(a.id)}>
-            {a.name}
-          </TabBtn>
-        ))}
-      </div>
+      <Tabs value={tab} onValueChange={(v) => void handleTabChange(v ?? "global")} className="mb-4">
+        <TabsList variant="line">
+          <TabsTrigger value="global">全域</TabsTrigger>
+          {agents.map((a) => (
+            <TabsTrigger key={a.id} value={a.id}>{a.name}</TabsTrigger>
+          ))}
+        </TabsList>
 
-      {/* Search */}
-      <input
-        type="text"
-        placeholder="搜尋詞彙或替換…"
-        className="input max-w-xs mb-4"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
-
-      {/* Add row */}
-      {adding && (
-        <div className="flex gap-2 items-center mb-3 p-3 bg-indigo-50 rounded">
-          <input
-            autoFocus
-            placeholder="詞彙"
-            className="input flex-1"
-            value={newForm.term}
-            onChange={(e) => setNewForm((f) => ({ ...f, term: e.target.value }))}
+        {/* Search — shared across tabs */}
+        <div className="mt-3">
+          <Input
+            type="text"
+            placeholder="搜尋詞彙或替換…"
+            className="max-w-xs"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
           />
-          <input
-            placeholder="替換"
-            className="input flex-1"
-            value={newForm.replacement}
-            onChange={(e) => setNewForm((f) => ({ ...f, replacement: e.target.value }))}
-          />
-          <input
-            type="number"
-            placeholder="優先"
-            className="input w-20"
-            value={newForm.priority}
-            onChange={(e) => setNewForm((f) => ({ ...f, priority: e.target.value }))}
-          />
-          <input
-            placeholder="備註"
-            className="input flex-1"
-            value={newForm.note}
-            onChange={(e) => setNewForm((f) => ({ ...f, note: e.target.value }))}
-          />
-          <button onClick={saveNew} disabled={busy} className="text-green-600 hover:text-green-800 disabled:opacity-40">
-            <Check size={18} />
-          </button>
-          <button onClick={() => setAdding(false)} className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
-          </button>
         </div>
-      )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="text-left text-xs text-gray-500 border-b border-gray-200">
-              <th className="py-2 pr-3 font-medium">詞彙</th>
-              <th className="py-2 pr-3 font-medium">替換</th>
-              <th className="py-2 pr-3 font-medium w-16 text-right">優先</th>
-              <th className="py-2 pr-3 font-medium">備註</th>
-              <th className="py-2 w-16" />
-            </tr>
-          </thead>
-          <tbody>
-            {visible.map((e) =>
-              editId === e.id ? (
-                <tr key={e.id} className="border-b border-indigo-100 bg-indigo-50">
-                  <td className="py-1.5 pr-3">
-                    <input
-                      className="input"
-                      value={String(editForm.term ?? "")}
-                      onChange={(ev) => setEditForm((f) => ({ ...f, term: ev.target.value }))}
-                    />
-                  </td>
-                  <td className="py-1.5 pr-3">
-                    <input
-                      className="input"
-                      value={String(editForm.replacement ?? "")}
-                      onChange={(ev) =>
-                        setEditForm((f) => ({ ...f, replacement: ev.target.value }))
-                      }
-                    />
-                  </td>
-                  <td className="py-1.5 pr-3">
-                    <input
-                      type="number"
-                      className="input text-right"
-                      value={String(editForm.priority ?? 0)}
-                      onChange={(ev) =>
-                        setEditForm((f) => ({ ...f, priority: parseInt(ev.target.value) || 0 }))
-                      }
-                    />
-                  </td>
-                  <td className="py-1.5 pr-3">
-                    <input
-                      className="input"
-                      value={String(editForm.note ?? "")}
-                      onChange={(ev) => setEditForm((f) => ({ ...f, note: ev.target.value }))}
-                    />
-                  </td>
-                  <td className="py-1.5 flex gap-1">
-                    <button
-                      onClick={() => saveEdit(e.id)}
-                      disabled={busy}
-                      className="text-green-600 hover:text-green-800 disabled:opacity-40"
-                    >
-                      <Check size={16} />
-                    </button>
-                    <button onClick={() => setEditId(null)} className="text-gray-400 hover:text-gray-600">
-                      <X size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ) : (
-                <tr key={e.id} className="border-b border-gray-100 hover:bg-gray-50">
-                  <td className="py-2 pr-3 font-medium">{e.term}</td>
-                  <td className="py-2 pr-3 text-indigo-700">{e.replacement}</td>
-                  <td className="py-2 pr-3 text-right tabular-nums text-gray-500">
-                    {e.priority}
-                  </td>
-                  <td className="py-2 pr-3 text-gray-400 text-xs">{e.note ?? ""}</td>
-                  <td className="py-2 flex gap-2">
-                    <button
-                      onClick={() => {
-                        setEditId(e.id);
-                        setEditForm({ term: e.term, replacement: e.replacement, priority: e.priority, note: e.note ?? "" });
-                      }}
-                      className="text-gray-400 hover:text-blue-600"
-                    >
-                      <Pencil size={15} />
-                    </button>
-                    <button
-                      onClick={() => deleteEntry(e.id)}
-                      disabled={busy}
-                      className="text-gray-400 hover:text-red-500 disabled:opacity-40"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </td>
-                </tr>
-              ),
-            )}
-          </tbody>
-        </table>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-8">尚無條目</p>
+        {/* Add row */}
+        {adding && (
+          <div className="flex gap-2 items-center mt-3 p-3 bg-primary/5 rounded-lg border border-primary/20">
+            <Input
+              autoFocus
+              placeholder="詞彙"
+              className="flex-1"
+              value={newForm.term}
+              onChange={(e) => setNewForm((f) => ({ ...f, term: e.target.value }))}
+            />
+            <Input
+              placeholder="替換"
+              className="flex-1"
+              value={newForm.replacement}
+              onChange={(e) => setNewForm((f) => ({ ...f, replacement: e.target.value }))}
+            />
+            <Input
+              type="number"
+              placeholder="優先"
+              className="w-20"
+              value={newForm.priority}
+              onChange={(e) => setNewForm((f) => ({ ...f, priority: e.target.value }))}
+            />
+            <Input
+              placeholder="備註"
+              className="flex-1"
+              value={newForm.note}
+              onChange={(e) => setNewForm((f) => ({ ...f, note: e.target.value }))}
+            />
+            <Button variant="ghost" size="icon-sm" onClick={() => void saveNew()} disabled={busy}>
+              <Check size={16} className="text-green-600" />
+            </Button>
+            <Button variant="ghost" size="icon-sm" onClick={() => setAdding(false)}>
+              <X size={16} />
+            </Button>
+          </div>
         )}
-      </div>
-    </div>
-  );
-}
 
-function TabBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-        active
-          ? "border-indigo-600 text-indigo-600"
-          : "border-transparent text-gray-500 hover:text-gray-700"
-      }`}
-    >
-      {children}
-    </button>
+        <TabsContent value={tab}>
+          <div className="rounded-md border mt-3">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>詞彙</TableHead>
+                  <TableHead>替換</TableHead>
+                  <TableHead className="w-16 text-right">優先</TableHead>
+                  <TableHead>備註</TableHead>
+                  <TableHead className="w-16" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {visible.map((e) =>
+                  editId === e.id ? (
+                    <TableRow key={e.id} className="bg-primary/5">
+                      <TableCell>
+                        <Input
+                          value={String(editForm.term ?? "")}
+                          onChange={(ev) => setEditForm((f) => ({ ...f, term: ev.target.value }))}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={String(editForm.replacement ?? "")}
+                          onChange={(ev) => setEditForm((f) => ({ ...f, replacement: ev.target.value }))}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="number"
+                          className="text-right"
+                          value={String(editForm.priority ?? 0)}
+                          onChange={(ev) =>
+                            setEditForm((f) => ({ ...f, priority: parseInt(ev.target.value) || 0 }))
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          value={String(editForm.note ?? "")}
+                          onChange={(ev) => setEditForm((f) => ({ ...f, note: ev.target.value }))}
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="icon-sm" onClick={() => void saveEdit(e.id)} disabled={busy}>
+                            <Check size={14} className="text-green-600" />
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" onClick={() => setEditId(null)}>
+                            <X size={14} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    <TableRow key={e.id}>
+                      <TableCell className="font-medium">{e.term}</TableCell>
+                      <TableCell className="text-primary">{e.replacement}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">
+                        {e.priority}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-xs">{e.note ?? ""}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            onClick={() => {
+                              setEditId(e.id);
+                              setEditForm({ term: e.term, replacement: e.replacement, priority: e.priority, note: e.note ?? "" });
+                            }}
+                          >
+                            <Pencil size={14} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            disabled={busy}
+                            onClick={() => void deleteEntry(e.id)}
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ),
+                )}
+              </TableBody>
+            </Table>
+            {visible.length === 0 && (
+              <p className="text-center text-muted-foreground text-sm py-8">尚無條目</p>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Badge summary */}
+      <p className="text-xs text-muted-foreground mt-2">
+        共 <Badge variant="secondary">{visible.length}</Badge> 筆
+      </p>
+    </div>
   );
 }
 
@@ -381,12 +355,8 @@ function parseCsvLine(line: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (ch === '"') {
-      if (inQuote && line[i + 1] === '"') {
-        cur += '"';
-        i++;
-      } else {
-        inQuote = !inQuote;
-      }
+      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
     } else if (ch === "," && !inQuote) {
       result.push(cur);
       cur = "";
