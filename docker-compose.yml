@@ -44,6 +44,12 @@ services:
   piper:
     build: ./infra/piper
     restart: unless-stopped
+    # Model file controlled by PIPER_MODEL_FILE in .env (just the filename, no path prefix).
+    command: >
+      python -m piper.http_server
+      --model /models/${PIPER_MODEL_FILE:-taigi.onnx}
+      --port 5000
+      --host 0.0.0.0
     ports:
       - "5050:5000"
     volumes:

@@ -52,28 +52,31 @@ fi
 kill_existing_session "$SESSION"
 echo "building tmux session '${SESSION}' (prod mode)..."
 
-# Pane 0: Playground
+# Step 1: Playground (pane 0, full window)
 tmux new-session -d -s "$SESSION" -x 220 -y 50 \
   -e "DATABASE_URL=${DATABASE_URL}" \
   -c "$ROOT/web"
 sleep 0.3
 tmux send-keys -t "${SESSION}:0.0" "pnpm --filter playground start -p 3000" Enter
 
-# Pane 1: Admin
-ADMIN_PANE=$(tmux split-window -t "${SESSION}:0.0" -h -P -F "#{pane_id}" \
+# Step 2: Worker (right half, full height)
+if [[ "$NO_WORKER" == "false" ]]; then
+  WORKER_PANE=$(tmux split-window -t "${SESSION}:0.0" -h -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  tmux resize-pane -t "${WORKER_PANE}" -x "55%"
+  sleep 0.3
+  tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main start" Enter
+fi
+
+# Step 3: Admin (left bottom)
+ADMIN_PANE=$(tmux split-window -t "${SESSION}:0.0" -v -P -F "#{pane_id}" \
   -e "DATABASE_URL=${DATABASE_URL}" \
   -c "$ROOT/web")
 sleep 0.3
 tmux send-keys -t "${ADMIN_PANE}" "pnpm --filter admin start -p 3001" Enter
 
-# Pane 2: Worker
 if [[ "$NO_WORKER" == "false" ]]; then
-  WORKER_PANE=$(tmux split-window -t "${SESSION}:0.0" -v -P -F "#{pane_id}" \
-    -e "DATABASE_URL=${DATABASE_URL}" \
-    -c "$ROOT/worker")
-  sleep 0.3
-  tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main start" Enter
-  tmux resize-pane -t "${WORKER_PANE}" -y 15
   tmux select-pane -t "${WORKER_PANE}"
 else
   tmux select-pane -t "${SESSION}:0.0"

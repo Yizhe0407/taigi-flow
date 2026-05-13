@@ -31,34 +31,41 @@ kill_existing_session "$SESSION"
 echo "building tmux session '${SESSION}' (dev mode)..."
 
 # Layout:
-#  ┌─────────────────────┬─────────────────────┐
-#  │  Playground :3000   │  Admin :3001         │
-#  ├─────────────────────┴─────────────────────┤
-#  │  Worker（dev 自動重載）                    │
-#  └────────────────────────────────────────────┘
+#  ┌─────────────┬─────────────────────────────────┐
+#  │ Playground  │                                  │
+#  │   :3000     │         Worker                   │
+#  ├─────────────┤        (right half)              │
+#  │   Admin     │                                  │
+#  │   :3001     │                                  │
+#  └─────────────┴─────────────────────────────────┘
 
-# Pane 0: Playground
+# Step 1: Playground on full window (pane 0)
 tmux new-session -d -s "$SESSION" -x 220 -y 50 \
   -e "DATABASE_URL=${DATABASE_URL}" \
   -c "$ROOT/web"
 sleep 0.3
 tmux send-keys -t "${SESSION}:0.0" "pnpm --filter playground dev" Enter
 
-# Pane 1: Admin（水平切右側）
-ADMIN_PANE=$(tmux split-window -t "${SESSION}:0.0" -h -P -F "#{pane_id}" \
+# Step 2: Split right → Worker (right half, full height)
+if [[ "$NO_WORKER" == "false" ]]; then
+  WORKER_PANE=$(tmux split-window -t "${SESSION}:0.0" -h -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  # Right pane gets 55% width, leaving 45% for left column
+  tmux resize-pane -t "${WORKER_PANE}" -x "55%"
+  sleep 0.3
+  tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main dev" Enter
+fi
+
+# Step 3: Split left column vertically → Playground (top) + Admin (bottom)
+ADMIN_PANE=$(tmux split-window -t "${SESSION}:0.0" -v -P -F "#{pane_id}" \
   -e "DATABASE_URL=${DATABASE_URL}" \
   -c "$ROOT/web")
 sleep 0.3
 tmux send-keys -t "${ADMIN_PANE}" "pnpm --filter admin dev" Enter
 
-# Pane 2: Worker（從 pane 0 垂直切下）
+# Focus worker (or playground if no-worker)
 if [[ "$NO_WORKER" == "false" ]]; then
-  WORKER_PANE=$(tmux split-window -t "${SESSION}:0.0" -v -P -F "#{pane_id}" \
-    -e "DATABASE_URL=${DATABASE_URL}" \
-    -c "$ROOT/worker")
-  sleep 0.3
-  tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main dev" Enter
-  tmux resize-pane -t "${WORKER_PANE}" -y 15
   tmux select-pane -t "${WORKER_PANE}"
 else
   tmux select-pane -t "${SESSION}:0.0"
