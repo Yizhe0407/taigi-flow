@@ -29,16 +29,33 @@ class PiperTTS:
         self._clear_event = asyncio.Event()
         self.executor = ThreadPoolExecutor(max_workers=1)
 
-        self.api_url = os.getenv("PIPER_TTS_API_URL")
-        self.api_model = os.getenv("PIPER_TTS_MODEL", "taigi_epoch1339")
-        self.api_voice = os.getenv("PIPER_TTS_VOICE", self.api_model)
-        self.api_speed = _read_float_env("PIPER_TTS_SPEED", 1.1)
-        self.api_noise_scale = _read_float_env("PIPER_TTS_NOISE_SCALE", 0.8)
-        self.api_noise_scale_w = _read_float_env("PIPER_TTS_NOISE_SCALE_W", 0.8)
-
+        # api_url is checked at init to decide whether to load the local model.
+        # All other config is re-read on each synthesize() call so that env changes
+        # (e.g. after livekit-agents dev hot-reload) take effect without restart.
+        api_url = os.getenv("PIPER_TTS_API_URL")
         self.voice: PiperVoice | None = None
-        if not self.api_url:
+        if not api_url:
             self.voice = PiperVoice.load(model_path)
+
+    @property
+    def api_url(self) -> str | None:
+        return os.getenv("PIPER_TTS_API_URL")
+
+    @property
+    def api_voice(self) -> str:
+        return os.getenv("PIPER_TTS_VOICE", "taigi")
+
+    @property
+    def api_speed(self) -> float:
+        return _read_float_env("PIPER_TTS_SPEED", 1.1)
+
+    @property
+    def api_noise_scale(self) -> float:
+        return _read_float_env("PIPER_TTS_NOISE_SCALE", 0.8)
+
+    @property
+    def api_noise_scale_w(self) -> float:
+        return _read_float_env("PIPER_TTS_NOISE_SCALE_W", 0.8)
 
     async def synthesize(self, taibun_text: str) -> AsyncIterator[bytes]:
         self._clear_event.clear()
