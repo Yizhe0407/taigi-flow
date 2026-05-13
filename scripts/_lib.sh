@@ -88,17 +88,17 @@ start_infra() {
     fi
   done
 
-  echo -n "⏳  等待 Piper TTS 就緒（首次需 build，約 1-2 分鐘）"
+  echo -n "waiting for Piper TTS (first run needs build, ~1-2 min)"
   for i in $(seq 1 90); do
-    if curl -sf http://localhost:5000/voices &>/dev/null 2>&1; then
-      echo " ✓"
+    if curl -s --max-time 2 -o /dev/null http://localhost:5050/voices; then
+      echo " ok"
       return 0
     fi
     echo -n "."
     sleep 2
   done
   echo ""
-  echo "⚠️   Piper TTS 3 分鐘內未就緒（可繼續，TTS 可能稍後才可用）"
+  echo "warning: Piper TTS not ready after 3 min (continuing anyway)"
 }
 
 # ── DB Migration ───────────────────────────────────────────────────────────────
