@@ -34,17 +34,19 @@ async def test_seed_agent_profile_exists(session: AsyncSession) -> None:
     )
     profile = result.scalar_one_or_none()
     assert profile is not None
-    assert profile.isActive is True
+    # isActive depends on which profile is currently selected in the admin;
+    # only assert the record exists, not its activation state.
 
 
-async def test_repository_get_active_by_id(session: AsyncSession) -> None:
+async def test_repository_get_active_profile_exists(session: AsyncSession) -> None:
+    """At least one agent profile should be active in the DB."""
     result = await session.execute(
-        select(AgentProfile).where(AgentProfile.name == "公車站長")
+        select(AgentProfile).where(AgentProfile.isActive.is_(True))  # type: ignore[arg-type]
     )
     profile = result.scalar_one_or_none()
-    assert profile is not None
+    assert profile is not None, "Expected at least one active AgentProfile"
 
     repo = AgentProfileRepository(session)
     fetched = await repo.get_active_by_id(profile.id)
     assert fetched is not None
-    assert fetched.name == "公車站長"
+    assert fetched.name == profile.name

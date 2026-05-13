@@ -15,6 +15,7 @@ from ..pipeline.asr.breeze import BreezeASR26
 from ..pipeline.asr.qwen3 import Qwen3ASR
 from ..pipeline.llm import LLMClient
 from ..pipeline.memory import SlidingWindowMemory
+from ..pipeline.realtime import RealtimePublisher
 from ..pipeline.text_processor import TextProcessor
 from ..pipeline.tts import PiperTTS
 
@@ -45,6 +46,8 @@ class AgentComponents:
     session_id: str
     agent_profile_id: str | None
     voice_controller: VoiceController
+    realtime: RealtimePublisher
+    agent_name: str
 
 
 def _build_tts() -> PiperTTS | None:
@@ -161,4 +164,6 @@ async def build_components(livekit_room: str) -> AgentComponents:
         session_id=session_id,
         agent_profile_id=profile_id,
         voice_controller=VoiceController(),
+        realtime=RealtimePublisher(),
+        agent_name=profile_name,
     )

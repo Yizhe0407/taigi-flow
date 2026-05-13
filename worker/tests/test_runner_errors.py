@@ -66,6 +66,8 @@ def _make_runner(
         session_id="test-session",
         agent_profile_id="test-profile",
         voice_controller=VoiceController(),
+        realtime=AsyncMock(),
+        agent_name="test-agent",
     )
     runner = PipelineRunner(
         components,

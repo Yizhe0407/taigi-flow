@@ -10,6 +10,7 @@ from livekit import rtc
 
 from ..audio.voice_controller import VoiceState
 from ..observability.metrics import LatencyTimer
+from ..pipeline.realtime import RealtimePublisher  # noqa: TCH001
 from ..pipeline.splitter import SmartSplitter
 
 if TYPE_CHECKING:
@@ -68,6 +69,8 @@ class PipelineRunner:
         self._log_repo: InteractionLogRepository | None = components.log_repo
         self._session_id = components.session_id
         self._vc: VoiceController = components.voice_controller
+        self._realtime: RealtimePublisher = components.realtime
+        self._agent_name: str = components.agent_name
         self._pipeline_busy = False
         self._utterance_seq = 0
         self._turn_index = 0
@@ -235,6 +238,12 @@ class PipelineRunner:
                 _first_audio_fired = True
                 timer.mark("first_audio")
                 self._vc.transition(VoiceState.SPEAKING)
+                asyncio.create_task(
+                    self._realtime.tts_first_audio(
+                        self._session_id,
+                        float(timer.as_dict().get("first_audio", 0)),
+                    )
+                )
 
         try:
             # ── Stage 1: ASR ─────────────────────────────────────────────────
@@ -267,6 +276,9 @@ class PipelineRunner:
             logger.info("[%s][asr] user_text=%s", trace_id, user_text)
             self._vc.transition(VoiceState.THINKING)
             self._memory.add("user", user_text)
+            asyncio.create_task(
+                self._realtime.asr_done(self._session_id, self._agent_name, user_text)
+            )
 
             def _on_first_token() -> None:
                 timer.mark("llm_first_tok")
@@ -333,6 +345,18 @@ class PipelineRunner:
                         trace_id,
                         log_err,
                     )
+            latencies = timer.as_dict()
+            asyncio.create_task(
+                self._realtime.turn_done(
+                    session_id=self._session_id,
+                    full_response=full_response,
+                    latency_asr_ms=latencies.get("asr_end"),
+                    latency_llm_first_tok_ms=latencies.get("llm_first_tok"),
+                    latency_first_audio_ms=latencies.get("first_audio"),
+                    was_barged_in=self._was_barged_in,
+                    error_flag=error_flag,
+                )
+            )
             # Only reset if no new turn has started (barge-in path sets _turn_gen).
             if self._turn_gen == my_gen:
                 self._pipeline_busy = False
@@ -404,6 +428,11 @@ class PipelineRunner:
             if not res.taibun.strip():
                 return
             last_hanlo, last_taibun = res.hanlo, res.taibun
+            asyncio.create_task(
+                self._realtime.llm_sentence(
+                    self._session_id, sentence, res.hanlo, res.taibun
+                )
+            )
             task: asyncio.Task[bytes] = asyncio.create_task(
                 self._synthesize_to_pcm(res.taibun, trace_id)
             )
