@@ -6,7 +6,13 @@ export const dynamic = "force-dynamic";
 export async function GET(): Promise<Response> {
   try {
     const [activeSessions, recentLogs] = await Promise.all([
-      prisma.session.count({ where: { endedAt: null } }),
+      // Only count sessions started within the last 2 hours as truly active.
+      prisma.session.count({
+        where: {
+          endedAt: null,
+          startedAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) },
+        },
+      }),
       prisma.interactionLog.findMany({
         orderBy: { createdAt: "desc" },
         take: 100,

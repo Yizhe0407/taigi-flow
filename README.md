@@ -73,17 +73,23 @@ cd ../../..
 
 ### 一鍵啟動
 
-設定完成後，每次開發只需：
+| 腳本 | 用途 | 環境變數 | Next.js | Worker |
+|------|------|---------|---------|--------|
+| `./dev.sh` | 本機開發 | `.env` | `next dev`（hot-reload）| `worker dev`（自動重載）|
+| `./prod.sh` | 正式展示 | `.env.prod` → `.env` | `next build` + `next start` | `worker start` |
 
 ```bash
-./dev.sh
+./dev.sh                    # 開發模式
+./prod.sh                   # 正式模式（先 build，再啟動）
+./prod.sh --skip-build      # 正式模式（略過 build，已建置過）
+./dev.sh --no-worker        # 只起前端，不啟動 Python Worker
 ```
 
-腳本會自動：
+兩支腳本都會自動：
 1. 啟動 Docker 基礎設施（postgres / redis / livekit）
 2. 等待 PostgreSQL 就緒
 3. 套用 pending DB migrations
-4. 開啟 tmux session，三個 pane 分別跑 Playground / Admin / Worker
+4. 開啟 tmux session，三個 pane 同時跑 Playground / Admin / Worker
 
 ```
 ┌──────────────────────┬───────────────────────┐
@@ -94,8 +100,6 @@ cd ../../..
 ```
 
 tmux 操作：`Ctrl+B 方向鍵` 切換 pane、`Ctrl+B z` 最大化、`Ctrl+B d` detach。
-
-選項：`./dev.sh --no-worker`（只起前端，不啟動 Python Worker）
 
 ### 服務一覽
 
