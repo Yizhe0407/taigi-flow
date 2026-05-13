@@ -31,6 +31,16 @@ class AgentProfileRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get_active(self) -> AgentProfile | None:
+        """Return the single active profile, or None if none is active."""
+        result = await self._session.execute(
+            select(AgentProfile)
+            .where(AgentProfile.isActive.is_(True))
+            .order_by(AgentProfile.updatedAt.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
 
 class InteractionLogRepository:
     def __init__(self, session_factory: Callable[[], AsyncSession]) -> None:

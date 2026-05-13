@@ -96,16 +96,18 @@ def _build_llm() -> LLMClient:
     )
 
 
-async def _load_profile(db: AsyncSession, profile_name: str) -> tuple[str, str | None]:
+async def _load_profile(db: AsyncSession) -> tuple[str, str | None, str]:
+    """Load the currently active profile from DB.
+
+    Returns (system_prompt, profile_id, profile_name).
+    """
     repo = AgentProfileRepository(db)
-    profile = await repo.get_active_by_name(profile_name)
+    profile = await repo.get_active()
     if profile is None:
-        logger.warning(
-            "Profile '%s' not found or inactive, using fallback prompt.", profile_name
-        )
-        return _FALLBACK_SYSTEM_PROMPT, None
-    logger.info("Using profile '%s' from database.", profile.name)
-    return profile.systemPrompt, profile.id
+        logger.warning("No active profile in DB, using fallback prompt.")
+        return _FALLBACK_SYSTEM_PROMPT, None, "fallback"
+    logger.info("Loaded active profile '%s' (id=%s)", profile.name, profile.id)
+    return profile.systemPrompt, profile.id, profile.name
 
 
 async def build_components(livekit_room: str) -> AgentComponents:
@@ -128,9 +130,8 @@ async def build_components(livekit_room: str) -> AgentComponents:
 
     llm = _build_llm()
 
-    profile_name = os.getenv("AGENT_PROFILE_NAME", "公車站長")
     async with async_session_factory() as db:
-        system_prompt, profile_id = await _load_profile(db, profile_name)
+        system_prompt, profile_id, profile_name = await _load_profile(db)
         memory = SlidingWindowMemory(system_prompt=system_prompt)
         text_processor = TextProcessor(profile_id=profile_id, db_session=None)
         await text_processor.reload_if_updated(db)

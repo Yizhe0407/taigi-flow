@@ -50,7 +50,11 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
         </Link>
       </div>
 
-      <p className="text-xs text-gray-400 mb-4">同一時間只能啟用一個人格。點選未啟用的人格即可切換。</p>
+      <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
+        <span>同一時間只能啟用一個人格。</span>
+        <span className="text-gray-300">·</span>
+        <span>切換後，<strong className="text-gray-500">下次使用者重新連線</strong>時自動套用新人格（不須重啟腳本）。</span>
+      </div>
 
       {profiles.length === 0 && (
         <p className="text-gray-500 text-sm">尚無 Agent 人格，請新增一個。</p>
