@@ -135,6 +135,7 @@ tmux kill-session -t taigi-flow-dev
 | LiveKit | ws://localhost:7880 | WebRTC 媒體伺服器 |
 | PostgreSQL | localhost:5432 / DB: `agent_system` | 主資料庫 |
 | Redis | localhost:6379 | LiveKit 佇列 |
+| Piper TTS | http://localhost:5000 | 台語 TTS（CPU，Docker build）|
 | Cloudbeaver（DB UI）| http://localhost:8978 | 資料庫瀏覽器 |
 
 ### 管理後台（Admin :3001）

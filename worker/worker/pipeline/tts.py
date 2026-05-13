@@ -98,14 +98,15 @@ class PiperTTS:
         if not normalized_text:
             return b""
 
+        # Piper http_server native format:
+        # - text (not input), voice, noise_scale, noise_w_scale (not noise_scale_w)
+        # - length_scale = 1/speed (piper uses duration scale, not speed scale)
         payload = {
-            "model": self.api_model,
+            "text": normalized_text,
             "voice": self.api_voice,
-            "input": normalized_text,
-            "response_format": "wav",
-            "speed": self.api_speed,
             "noise_scale": self.api_noise_scale,
-            "noise_scale_w": self.api_noise_scale_w,
+            "noise_w_scale": self.api_noise_scale_w,
+            "length_scale": round(1.0 / max(self.api_speed, 0.1), 4),
         }
 
         last_error: Exception | None = None

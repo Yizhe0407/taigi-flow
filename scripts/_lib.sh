@@ -69,7 +69,7 @@ kill_web_ports() {
 start_infra() {
   local root="$1"
   echo "🐳  啟動 Docker 服務…"
-  # 用完整 compose up 確保所有容器在同一 network
+  # 完整 compose up 確保所有容器在同一 network
   docker compose -f "$root/docker-compose.yml" up -d 2>&1 \
     | grep -vE "^$|^Network|^Volume" || true
 
@@ -77,14 +77,28 @@ start_infra() {
   for i in $(seq 1 30); do
     if docker exec taigi-flow-postgres-1 pg_isready -U admin -d agent_system &>/dev/null 2>&1; then
       echo " ✓"
-      return 0
+      break
     fi
     echo -n "."
     sleep 1
+    if [[ $i -eq 30 ]]; then
+      echo ""
+      echo "❌  PostgreSQL 30 秒後仍未就緒，請檢查 Docker 狀態"
+      exit 1
+    fi
+  done
+
+  echo -n "⏳  等待 Piper TTS 就緒（首次需 build，約 1-2 分鐘）"
+  for i in $(seq 1 90); do
+    if curl -sf http://localhost:5000/voices &>/dev/null 2>&1; then
+      echo " ✓"
+      return 0
+    fi
+    echo -n "."
+    sleep 2
   done
   echo ""
-  echo "❌  PostgreSQL 30 秒後仍未就緒，請檢查 Docker 狀態"
-  exit 1
+  echo "⚠️   Piper TTS 3 分鐘內未就緒（可繼續，TTS 可能稍後才可用）"
 }
 
 # ── DB Migration ───────────────────────────────────────────────────────────────

@@ -41,6 +41,20 @@ services:
       redis:
         condition: service_healthy
 
+  piper:
+    build: ./infra/piper
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./worker/models:/models:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:5000/voices')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   cloudbeaver:
     image: dbeaver/cloudbeaver:latest
     restart: unless-stopped
