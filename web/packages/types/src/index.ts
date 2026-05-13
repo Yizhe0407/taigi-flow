@@ -54,13 +54,23 @@ export const pronunciationFromLogSchema = z.object({
 });
 export type PronunciationFromLogInput = z.infer<typeof pronunciationFromLogSchema>;
 
+export const sessionStatusSchema = z.enum(["active", "ended", "stale"]);
+export type SessionStatus = z.infer<typeof sessionStatusSchema>;
+
 export const sessionListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
   cursor: z.string().uuid().optional(),
   agentProfileId: z.string().uuid().optional(),
-  hasError: z.coerce.boolean().optional(),
+  status: sessionStatusSchema.optional(),
+  sortBy: z.enum(["startedAt", "turnCount"]).default("startedAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
 });
 export type SessionListQuery = z.infer<typeof sessionListQuerySchema>;
+
+export const sessionBatchDeleteSchema = z.object({
+  ids: z.array(z.string().uuid()).min(1).max(200),
+});
+export type SessionBatchDeleteInput = z.infer<typeof sessionBatchDeleteSchema>;
 
 export const turnFilterSchema = z.object({
   bargedIn: z.coerce.boolean().optional(),

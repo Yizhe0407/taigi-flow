@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { Inter } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Taigi Flow – Admin",
@@ -15,7 +19,7 @@ const NAV = [
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="zh-TW">
+    <html lang="zh-TW" className={cn("font-sans", inter.variable)}>
       <body className="flex min-h-screen bg-gray-50 text-gray-900">
         <aside className="w-52 shrink-0 bg-gray-900 text-gray-100 flex flex-col">
           <div className="px-4 py-5 text-lg font-bold border-b border-gray-700">
