@@ -51,7 +51,16 @@ export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
 export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> {
   try {
     const { id } = await params;
-    await prisma.agentProfile.delete({ where: { id } });
+    await prisma.$transaction(async (tx) => {
+      const sessionIds = (
+        await tx.session.findMany({ where: { agentProfileId: id }, select: { id: true } })
+      ).map((s) => s.id);
+      if (sessionIds.length > 0) {
+        await tx.interactionLog.deleteMany({ where: { sessionId: { in: sessionIds } } });
+        await tx.session.deleteMany({ where: { id: { in: sessionIds } } });
+      }
+      await tx.agentProfile.delete({ where: { id } });
+    });
     return ok({ ok: true });
   } catch (err) {
     return handleError(err);
