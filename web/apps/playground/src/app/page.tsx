@@ -1,5 +1,6 @@
 "use client";
 
+import type { MediaDeviceFailure } from "livekit-client";
 import {
   BarVisualizer,
   DisconnectButton,
@@ -214,14 +215,14 @@ export default function Playground() {
                 setConnected(true);
                 setRoomError(null);
               }}
-              onError={(error) => {
+              onError={(error: Error) => {
                 const currentUrl = connectionDetails.url;
                 const message = error.message.includes("could not establish signal connection")
                   ? `${error.message} (serverUrl=${currentUrl})`
                   : error.message;
                 setRoomError(message);
               }}
-              onMediaDeviceFailure={(failure, kind) => {
+              onMediaDeviceFailure={(failure?: MediaDeviceFailure, kind?: MediaDeviceKind) => {
                 setDeviceError(`${kind ?? "media"} failure: ${failure ?? "unknown"}`);
               }}
               onDisconnected={() => {
