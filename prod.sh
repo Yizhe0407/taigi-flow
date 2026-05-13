@@ -34,7 +34,10 @@ load_env "$ENV_FILE"
 start_infra "$ROOT"
 run_migrations "$ROOT"
 
-# ── 3. Next.js Build ──────────────────────────────────────────────────────────
+# ── 3. 清理舊 web 程序 ────────────────────────────────────────────────────────
+kill_web_ports
+
+# ── 4. Next.js Build ──────────────────────────────────────────────────────────
 if [[ "$SKIP_BUILD" == "false" ]]; then
   echo "🔨  建置 Next.js（Playground + Admin）…"
   cd "$ROOT/web"
@@ -46,7 +49,7 @@ else
   echo "⏭️   略過建置（--skip-build）"
 fi
 
-# ── 4. tmux session ───────────────────────────────────────────────────────────
+# ── 5. tmux session ───────────────────────────────────────────────────────────
 kill_existing_session "$SESSION"
 echo "🖥️   建立 tmux session '$SESSION'（正式模式）…"
 
@@ -78,6 +81,6 @@ else
   tmux select-pane -t "$SESSION:0.0"
 fi
 
-# ── 5. Attach ─────────────────────────────────────────────────────────────────
+# ── 6. Attach ─────────────────────────────────────────────────────────────────
 print_ready_msg "$SESSION" "PROD"
 tmux attach-session -t "$SESSION"

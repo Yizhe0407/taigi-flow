@@ -99,7 +99,32 @@ cd ../../..
 └──────────────────────────────────────────────┘
 ```
 
-tmux 操作：`Ctrl+B 方向鍵` 切換 pane、`Ctrl+B z` 最大化、`Ctrl+B d` detach。
+**tmux 第一次用？**
+
+```bash
+brew install tmux   # 安裝（一次性）
+```
+
+啟動後畫面會分割成三個區塊，滑鼠點擊可切換（需 tmux ≥ 2.1）。
+
+| 按鍵 | 動作 |
+|------|------|
+| `Ctrl+B` 再按方向鍵 | 切換到另一個 pane |
+| `Ctrl+B` 再按 `z` | 目前 pane 放大/還原 |
+| `Ctrl+B` 再按 `d` | 離開畫面（程序繼續跑） |
+| `Ctrl+B` 再按 `[` | 進入捲動模式（`q` 退出）|
+| `q` | 退出捲動模式 |
+
+**重新回到畫面**（detach 後）：
+```bash
+tmux attach -t taigi-flow-dev    # 開發模式
+tmux attach -t taigi-flow-prod   # 正式模式
+```
+
+**完全停止所有服務**：
+```bash
+tmux kill-session -t taigi-flow-dev
+```
 
 ### 服務一覽
 

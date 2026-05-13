@@ -23,7 +23,10 @@ load_env "$ROOT/.env"
 start_infra "$ROOT"
 run_migrations "$ROOT"
 
-# ── 3. tmux session ───────────────────────────────────────────────────────────
+# ── 3. 清理舊 web 程序 ────────────────────────────────────────────────────────
+kill_web_ports
+
+# ── 4. tmux session ───────────────────────────────────────────────────────────
 kill_existing_session "$SESSION"
 echo "🖥️   建立 tmux session '$SESSION'（開發模式）…"
 

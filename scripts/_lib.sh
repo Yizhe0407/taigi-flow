@@ -43,13 +43,35 @@ load_env() {
   echo "🔑  使用環境變數：$env_file"
 }
 
+# ── 清理殘留 port 程序 ─────────────────────────────────────────────────────────
+
+kill_port() {
+  local port="$1"
+  local pids
+  pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+  if [[ -n "$pids" ]]; then
+    echo "🔪  清除 port $port 上的舊程序（PID: $pids）…"
+    echo "$pids" | xargs kill -TERM 2>/dev/null || true
+    sleep 1
+    # 強制殺掉還在的
+    pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+    [[ -n "$pids" ]] && echo "$pids" | xargs kill -KILL 2>/dev/null || true
+  fi
+}
+
+kill_web_ports() {
+  kill_port 3000
+  kill_port 3001
+}
+
 # ── Docker + PostgreSQL ────────────────────────────────────────────────────────
 
 start_infra() {
   local root="$1"
   echo "🐳  啟動 Docker 服務…"
-  docker compose -f "$root/docker-compose.yml" up -d postgres redis livekit 2>&1 \
-    | grep -vE "^$|^Network|^Container" || true
+  # 用完整 compose up 確保所有容器在同一 network
+  docker compose -f "$root/docker-compose.yml" up -d 2>&1 \
+    | grep -vE "^$|^Network|^Volume" || true
 
   echo -n "⏳  等待 PostgreSQL 就緒"
   for i in $(seq 1 30); do
@@ -100,10 +122,13 @@ print_ready_msg() {
   echo "   Playground → http://localhost:3000"
   echo "   Admin      → http://localhost:3001"
   echo ""
-  echo "   tmux 操作："
-  echo "   Ctrl+B + 方向鍵  切換 pane"
-  echo "   Ctrl+B + z        pane 最大化/還原"
-  echo "   Ctrl+B + d        detach（服務繼續跑）"
-  echo "   tmux kill-session -t $session  關閉所有服務"
+  echo "   ┌─ tmux 基本操作 ──────────────────────────────┐"
+  echo "   │  Ctrl+B → 方向鍵   切換 pane                │"
+  echo "   │  Ctrl+B → z         目前 pane 最大化/還原    │"
+  echo "   │  Ctrl+B → d         detach（程序繼續跑）     │"
+  echo "   │  Ctrl+B → [         進入捲動模式（q 退出）   │"
+  echo "   └──────────────────────────────────────────────┘"
+  echo ""
+  echo "   停止所有服務：tmux kill-session -t $session"
   echo ""
 }
