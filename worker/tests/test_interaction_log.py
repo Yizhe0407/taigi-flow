@@ -37,6 +37,7 @@ async def repo_bundle() -> tuple[
                     systemPrompt="Test.",
                     voiceConfig={},
                     tools=[],
+                    isActive=False,
                     createdAt=now,
                     updatedAt=now,
                 )
