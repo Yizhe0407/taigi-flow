@@ -337,7 +337,7 @@ function StartDiagnostics({
   ];
 
   return (
-    <Collapsible defaultOpen className="w-full">
+    <Collapsible className="w-full">
       <Card className="w-full">
         <CardHeader className="pb-3">
           <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left cursor-pointer">
