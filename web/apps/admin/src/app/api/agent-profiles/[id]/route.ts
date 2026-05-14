@@ -1,6 +1,10 @@
 import { prisma } from "@taigi-flow/db";
 import { agentProfileUpdateSchema } from "@taigi-flow/types";
 import { error, handleError, ok, parseJson } from "@/lib/api";
+import {
+  deleteAgentProfileCascade,
+  updateAgentProfile,
+} from "@/lib/services/agent-profile.service";
 
 export const dynamic = "force-dynamic";
 
@@ -32,14 +36,8 @@ export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
       ...(input.isActive !== undefined && { isActive: input.isActive }),
     };
 
-    const profile = await prisma.$transaction(async (tx) => {
-      if (input.isActive === true) {
-        await tx.agentProfile.updateMany({
-          where: { id: { not: id } },
-          data: { isActive: false },
-        });
-      }
-      return tx.agentProfile.update({ where: { id }, data: updateData });
+    const profile = await updateAgentProfile(id, updateData, {
+      exclusiveActivation: input.isActive === true,
     });
 
     return ok(profile);
@@ -51,16 +49,7 @@ export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
 export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> {
   try {
     const { id } = await params;
-    await prisma.$transaction(async (tx) => {
-      const sessionIds = (
-        await tx.session.findMany({ where: { agentProfileId: id }, select: { id: true } })
-      ).map((s) => s.id);
-      if (sessionIds.length > 0) {
-        await tx.interactionLog.deleteMany({ where: { sessionId: { in: sessionIds } } });
-        await tx.session.deleteMany({ where: { id: { in: sessionIds } } });
-      }
-      await tx.agentProfile.delete({ where: { id } });
-    });
+    await deleteAgentProfileCascade(id);
     return ok({ ok: true });
   } catch (err) {
     return handleError(err);

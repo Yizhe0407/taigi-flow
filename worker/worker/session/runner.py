@@ -297,6 +297,10 @@ class PipelineRunner:
                 )
                 if partial_flag is not None:
                     error_flag = partial_flag
+                    # TTS failed before any audio — play fallback so
+                    # user isn't left in silence.
+                    if partial_flag == "tts_fail" and not _first_audio_fired:
+                        await self._fallback.play("tts_fail")
             except TimeoutError as e:
                 logger.error("[%s][llm] first token timeout: %s", trace_id, e)
                 error_flag = "llm_timeout"
@@ -477,6 +481,7 @@ class PipelineRunner:
                 play_queue.put_nowait(None)  # sentinel
 
         async def _consume() -> None:
+            nonlocal partial_flag
             while True:
                 item = await play_queue.get()
                 if item is None:
@@ -487,6 +492,7 @@ class PipelineRunner:
                     raise
                 except Exception as e:
                     logger.error("[%s][tts] sentence failed: %s", trace_id, e)
+                    partial_flag = "tts_fail"
                     continue
                 await self._play_pcm_bytes(pcm, trace_id, on_first_audio)
 

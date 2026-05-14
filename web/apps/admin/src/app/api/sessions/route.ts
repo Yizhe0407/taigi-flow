@@ -1,6 +1,7 @@
 import { prisma } from "@taigi-flow/db";
 import { sessionBatchDeleteSchema, sessionListQuerySchema } from "@taigi-flow/types";
 import { handleError, ok, parseJson, error } from "@/lib/api";
+import { deleteSessionsBatch } from "@/lib/services/session.service";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +54,8 @@ export async function GET(req: Request): Promise<Response> {
 export async function DELETE(req: Request): Promise<Response> {
   try {
     const body = await parseJson(req, sessionBatchDeleteSchema);
-    await prisma.$transaction([
-      prisma.interactionLog.deleteMany({ where: { sessionId: { in: body.ids } } }),
-      prisma.session.deleteMany({ where: { id: { in: body.ids } } }),
-    ]);
-    return ok({ deleted: body.ids.length });
+    const deleted = await deleteSessionsBatch(body.ids);
+    return ok({ deleted });
   } catch (err) {
     return handleError(err);
   }
