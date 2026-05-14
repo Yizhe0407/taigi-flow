@@ -454,11 +454,9 @@ function PlaygroundUI({
           </CardContent>
         </Card>
 
-        <DisconnectButton asChild>
-          <Button variant="destructive" className="self-center rounded-full px-7">
-            <PhoneOff className="mr-2 h-4 w-4" />
-            End Conversation
-          </Button>
+        <DisconnectButton className="self-center inline-flex items-center rounded-full bg-destructive px-7 py-2 text-sm font-medium text-white transition-colors hover:bg-destructive/90">
+          <PhoneOff className="mr-2 h-4 w-4" />
+          End Conversation
         </DisconnectButton>
 
         {!connected && (
