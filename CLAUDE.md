@@ -42,6 +42,7 @@
 - **ASR**：Qwen3-ASR 與 Breeze-ASR-26 雙 backend 抽象介面。Phase 2 以實測數據決定預設，**在此之前兩者都要實作**。
 - **套件管理**：Python 端一律用 `uv`，**不用 pip / poetry / conda**。Node 端用 pnpm。
 - **傳輸**：LiveKit（WebRTC）。**不自幹 WebSocket 音訊協定**。
+- **前端 UI 元件**：一律使用 **shadcn/ui**（`pnpm dlx shadcn@latest add <component>` 下載，**不手寫元件代碼**）。Icons 一律使用 **lucide-react**，**不用其他 icon library**。兩個前端 app（admin、playground）均適用。
 
 ### 架構決策（不可改）
 

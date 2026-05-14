@@ -14,7 +14,23 @@ import {
 } from "@livekit/components-react";
 import "@livekit/components-styles";
 import { LocalAudioTrack, RemoteAudioTrack } from "livekit-client";
+import {
+  ArrowLeft,
+  Mic,
+  MicOff,
+  Moon,
+  PhoneOff,
+  Radio,
+  RotateCcw,
+  Sun,
+  Wifi,
+  WifiOff,
+} from "lucide-react";
+import { useTheme } from "next-themes";
 import { useCallback, useEffect, useState } from "react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type DispatchStatus = "unknown" | "ok" | "unavailable";
 
@@ -33,8 +49,7 @@ function normalizeLiveKitUrl(rawUrl: string): string {
     const isServerUrlLocal = localHosts.has(parsed.hostname);
     const isCurrentHostLocal = localHosts.has(currentHost);
 
-    // If the page is opened from another host/device, localhost in token response
-    // points to the wrong machine. Rebind to current host while preserving port.
+    // If the page is opened from another host/device, rebind localhost to current host.
     if (isServerUrlLocal && !isCurrentHostLocal) {
       parsed.hostname = currentHost;
     }
@@ -45,6 +60,21 @@ function normalizeLiveKitUrl(rawUrl: string): string {
   } catch {
     return rawUrl;
   }
+}
+
+function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <Button
+      variant="outline"
+      size="icon"
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      aria-label="切換主題"
+    >
+      <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+      <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+    </Button>
+  );
 }
 
 export default function Playground() {
@@ -117,8 +147,7 @@ export default function Playground() {
         return;
       }
 
-      // AEC/NS/AGC must stay true — disabling any of these causes TTS echo to
-      // trigger barge-in (self-speech suppression relies on browser-level AEC).
+      // AEC/NS/AGC must stay true — disabling any causes TTS echo to trigger barge-in.
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -165,16 +194,19 @@ export default function Playground() {
   }, [requestToken]);
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-zinc-950 via-zinc-900 to-zinc-950 text-white">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col items-center justify-center gap-6 px-6 py-10">
-        <div className="text-center">
-          <div className="text-xs uppercase tracking-[0.3em] text-zinc-400">
-            LiveKit Voice Playground
+    <main className="min-h-screen bg-background">
+      <div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col items-center justify-center gap-6 px-6 py-10">
+        <div className="w-full flex items-start justify-between">
+          <div className="text-center flex-1">
+            <p className="text-xs uppercase tracking-[0.3em] text-muted-foreground">
+              LiveKit Voice Playground
+            </p>
+            <h1 className="mt-2 text-4xl font-semibold">Taigi-Flow</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              即時語音互動（ASR → LLM → TTS）
+            </p>
           </div>
-          <h1 className="mt-2 text-4xl font-semibold">Taigi-Flow</h1>
-          <p className="mt-2 text-sm text-zinc-400">
-            即時語音互動（ASR → LLM → TTS）
-          </p>
+          <ThemeToggle />
         </div>
 
         <StartDiagnostics
@@ -192,13 +224,15 @@ export default function Playground() {
         />
 
         {!sessionStarted ? (
-          <button
+          <Button
             onClick={onConnectButtonClicked}
             disabled={tokenLoading}
-            className="rounded-full bg-emerald-400 px-8 py-3 text-sm font-semibold text-black transition-colors hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-300"
+            size="lg"
+            className="rounded-full px-8"
           >
+            <Mic className="mr-2 h-4 w-4" />
             {tokenLoading ? "Preparing..." : "Start Conversation"}
-          </button>
+          </Button>
         ) : connectionDetails ? (
           <div className="flex w-full flex-col gap-4">
             {/* AEC/NS/AGC must stay true — see getUserMedia comment above. */}
@@ -238,18 +272,14 @@ export default function Playground() {
             </LiveKitRoom>
             {!connected && (
               <div className="mx-auto flex gap-3">
-                <button
-                  onClick={onRetryConnection}
-                  className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-black transition-colors hover:bg-emerald-300"
-                >
+                <Button onClick={onRetryConnection} className="rounded-full">
+                  <RotateCcw className="mr-2 h-4 w-4" />
                   Retry connection
-                </button>
-                <button
-                  onClick={onBackToStart}
-                  className="rounded-full border border-zinc-700 px-5 py-2 text-sm font-semibold text-zinc-200 transition-colors hover:bg-zinc-800"
-                >
+                </Button>
+                <Button variant="outline" onClick={onBackToStart} className="rounded-full">
+                  <ArrowLeft className="mr-2 h-4 w-4" />
                   Back
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -301,26 +331,37 @@ function StartDiagnostics({
   ];
 
   return (
-    <div className="w-full rounded-2xl border border-zinc-800 bg-zinc-900/70 p-5 text-sm shadow-xl">
-      <div className="mb-3 font-semibold text-zinc-100">Connection Diagnostics</div>
-      <div className="grid gap-2 text-zinc-300 md:grid-cols-2">
-        {rows.map((row) => (
-          <div
-            key={row.label}
-            className="flex items-center justify-between rounded-lg border border-zinc-800/80 bg-zinc-950/70 px-3 py-2"
-          >
-            <span className="text-zinc-400">{row.label}</span>
-            <span
-              className={`ml-3 max-w-[70%] text-right text-zinc-200 ${
-                row.multiline ? "break-all whitespace-pre-wrap" : "truncate"
-              }`}
+    <Card className="w-full">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm flex items-center gap-2">
+          {connected ? (
+            <Wifi className="h-4 w-4 text-green-500" />
+          ) : (
+            <WifiOff className="h-4 w-4 text-muted-foreground" />
+          )}
+          Connection Diagnostics
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="grid gap-2 text-sm md:grid-cols-2">
+          {rows.map((row) => (
+            <div
+              key={row.label}
+              className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2"
             >
-              {row.value}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
+              <span className="text-muted-foreground shrink-0">{row.label}</span>
+              <span
+                className={`ml-3 max-w-[60%] text-right ${
+                  row.multiline ? "break-all whitespace-pre-wrap" : "truncate"
+                }`}
+              >
+                {row.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -351,70 +392,82 @@ function PlaygroundUI({
   }, [connected, isMicrophoneEnabled, localParticipant]);
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-2xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-zinc-400">
-            Agent Status
+    <Card className="w-full">
+      <CardContent className="flex flex-col gap-5 pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Agent Status
+            </p>
+            <div className="mt-1 text-2xl font-bold capitalize">{statusLabel}</div>
           </div>
-          <div className="mt-1 text-2xl font-bold capitalize text-white">
-            {statusLabel}
-          </div>
+          <Badge variant={connected ? "default" : "secondary"}>
+            {connected ? (
+              <Wifi className="mr-1 h-3 w-3" />
+            ) : (
+              <WifiOff className="mr-1 h-3 w-3" />
+            )}
+            {connected ? "Connected" : "Disconnected"}
+          </Badge>
         </div>
-        <div
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            connected ? "bg-emerald-500/20 text-emerald-300" : "bg-zinc-800 text-zinc-300"
-          }`}
-        >
-          {connected ? "Connected" : "Disconnected"}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <WaveformCard
+            title="Your voice"
+            icon={isMicrophoneEnabled ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+            active={isMicrophoneEnabled}
+            subtitle={isMicrophoneEnabled ? "Mic is on" : "Mic is off"}
+            trackAvailable={!!microphoneTrack}
+            track={microphoneTrack?.track as LocalAudioTrack | undefined}
+            emptyText="Waiting for local mic track..."
+          />
+          <WaveformCard
+            title="Agent voice"
+            icon={<Radio className="h-4 w-4" />}
+            active={state === "speaking" || !!audioTrack}
+            subtitle={state === "speaking" ? "Agent is speaking" : "Listening / idle"}
+            trackAvailable={!!audioTrack}
+            track={audioTrack ?? undefined}
+            emptyText="Waiting for agent audio..."
+          />
         </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <WaveformCard
-          title="Your voice"
-          active={isMicrophoneEnabled}
-          subtitle={isMicrophoneEnabled ? "Mic is on" : "Mic is off"}
-          trackAvailable={!!microphoneTrack}
-          track={microphoneTrack?.track as LocalAudioTrack | undefined}
-          emptyText="Waiting for local mic track..."
-        />
-        <WaveformCard
-          title="Agent voice"
-          active={state === "speaking" || !!audioTrack}
-          subtitle={state === "speaking" ? "Agent is speaking" : "Listening / idle"}
-          trackAvailable={!!audioTrack}
-          track={audioTrack ?? undefined}
-          emptyText="Waiting for agent audio..."
-        />
-      </div>
+        <Card className="bg-muted/30">
+          <CardContent className="pt-4 text-sm text-muted-foreground space-y-1">
+            <div>Room state: {connectionState}</div>
+            <div>Local microphone enabled: {isMicrophoneEnabled ? "yes" : "no"}</div>
+            <div>Local microphone track: {microphoneTrack ? "published" : "none"}</div>
+            <div>
+              Microphone error: {lastMicrophoneError?.message ?? micEnableError ?? "-"}
+            </div>
+          </CardContent>
+        </Card>
 
-      <div className="w-full rounded-xl border border-zinc-800 bg-black/30 p-4 text-sm text-zinc-300">
-        <div>Room state: {connectionState}</div>
-        <div>Local microphone enabled: {isMicrophoneEnabled ? "yes" : "no"}</div>
-        <div>Local microphone track: {microphoneTrack ? "published" : "none"}</div>
-        <div>
-          Microphone error: {lastMicrophoneError?.message ?? micEnableError ?? "-"}
-        </div>
-      </div>
+        <DisconnectButton asChild>
+          <Button variant="destructive" className="self-center rounded-full px-7">
+            <PhoneOff className="mr-2 h-4 w-4" />
+            End Conversation
+          </Button>
+        </DisconnectButton>
 
-      <DisconnectButton className="self-center rounded-full bg-red-500 px-7 py-2 text-white transition-colors hover:bg-red-600">
-        End Conversation
-      </DisconnectButton>
-      {!connected && (
-        <button
-          onClick={onBackToStart}
-          className="self-center text-sm text-zinc-400 underline-offset-4 hover:text-zinc-200 hover:underline"
-        >
-          Back to start
-        </button>
-      )}
-    </div>
+        {!connected && (
+          <Button
+            variant="ghost"
+            onClick={onBackToStart}
+            className="self-center text-sm text-muted-foreground"
+          >
+            <ArrowLeft className="mr-1 h-4 w-4" />
+            Back to start
+          </Button>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 function WaveformCard({
   title,
+  icon,
   subtitle,
   active,
   trackAvailable,
@@ -422,6 +475,7 @@ function WaveformCard({
   emptyText,
 }: {
   title: string;
+  icon: React.ReactNode;
   subtitle: string;
   active: boolean;
   trackAvailable: boolean;
@@ -429,30 +483,37 @@ function WaveformCard({
   emptyText: string;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-4">
-      <div className="mb-3 flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold text-zinc-100">{title}</div>
-          <div className="text-xs text-zinc-400">{subtitle}</div>
-        </div>
-        <div
-          className={`h-2.5 w-2.5 rounded-full ${
-            active ? "bg-emerald-400 shadow-[0_0_12px_#34d399]" : "bg-zinc-600"
-          }`}
-        />
-      </div>
-      <div className="flex h-28 items-center justify-center rounded-lg bg-black/40">
-        {trackAvailable && track ? (
-          <BarVisualizer
-            track={track}
-            barCount={9}
-            options={{ minHeight: 6 }}
-            className="h-20 [--lk-fg:#34d399]"
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center justify-between text-sm">
+          <div className="flex items-center gap-2">
+            <span className={active ? "text-foreground" : "text-muted-foreground"}>
+              {icon}
+            </span>
+            {title}
+          </div>
+          <div
+            className={`h-2 w-2 rounded-full transition-colors ${
+              active ? "bg-green-500 shadow-[0_0_8px_theme(colors.green.500)]" : "bg-muted-foreground/30"
+            }`}
           />
-        ) : (
-          <span className="text-sm text-zinc-500">{emptyText}</span>
-        )}
-      </div>
-    </div>
+        </CardTitle>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </CardHeader>
+      <CardContent>
+        <div className="flex h-24 items-center justify-center rounded-lg bg-muted/40">
+          {trackAvailable && track ? (
+            <BarVisualizer
+              track={track}
+              barCount={9}
+              options={{ minHeight: 6 }}
+              className="h-16 [--lk-fg:oklch(0.723_0.219_149.579)]"
+            />
+          ) : (
+            <span className="text-xs text-muted-foreground">{emptyText}</span>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
