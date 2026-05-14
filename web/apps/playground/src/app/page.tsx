@@ -16,6 +16,7 @@ import "@livekit/components-styles";
 import { LocalAudioTrack, RemoteAudioTrack } from "livekit-client";
 import {
   ArrowLeft,
+  ChevronDown,
   Mic,
   MicOff,
   Moon,
@@ -31,6 +32,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 type DispatchStatus = "unknown" | "ok" | "unavailable";
 
@@ -331,37 +337,42 @@ function StartDiagnostics({
   ];
 
   return (
-    <Card className="w-full">
-      <CardHeader className="pb-3">
-        <CardTitle className="text-sm flex items-center gap-2">
-          {connected ? (
-            <Wifi className="h-4 w-4 text-green-500" />
-          ) : (
-            <WifiOff className="h-4 w-4 text-muted-foreground" />
-          )}
-          Connection Diagnostics
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-2 text-sm md:grid-cols-2">
-          {rows.map((row) => (
-            <div
-              key={row.label}
-              className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2"
-            >
-              <span className="text-muted-foreground shrink-0">{row.label}</span>
-              <span
-                className={`ml-3 max-w-[60%] text-right ${
-                  row.multiline ? "break-all whitespace-pre-wrap" : "truncate"
-                }`}
-              >
-                {row.value}
-              </span>
+    <Collapsible defaultOpen className="w-full">
+      <Card className="w-full">
+        <CardHeader className="pb-3">
+          <CollapsibleTrigger className="group flex w-full items-center gap-2 text-left cursor-pointer">
+            {connected ? (
+              <Wifi className="h-4 w-4 shrink-0 text-green-500" />
+            ) : (
+              <WifiOff className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <CardTitle className="flex-1 text-sm">Connection Diagnostics</CardTitle>
+            <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-data-[open]:rotate-180" />
+          </CollapsibleTrigger>
+        </CardHeader>
+        <CollapsibleContent>
+          <CardContent className="pt-0">
+            <div className="grid gap-2 text-sm md:grid-cols-2">
+              {rows.map((row) => (
+                <div
+                  key={row.label}
+                  className="flex items-center justify-between rounded-lg border bg-muted/30 px-3 py-2"
+                >
+                  <span className="text-muted-foreground shrink-0">{row.label}</span>
+                  <span
+                    className={`ml-3 max-w-[60%] text-right ${
+                      row.multiline ? "break-all whitespace-pre-wrap" : "truncate"
+                    }`}
+                  >
+                    {row.value}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
