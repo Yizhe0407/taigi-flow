@@ -217,8 +217,7 @@ async def test_tts_exception_skips_sentence_and_continues() -> None:
 
     await runner.process_utterance(_AUDIO)
 
-    # No fallback played — TTS errors are sentence-level, not fatal
-    fb.play.assert_not_awaited()
-    # Pipeline still completes: log_turn is called, no error_flag
-    assert log_repo.log_turn.called
-    assert log_repo.log_turn.call_args.kwargs["error_flag"] is None
+    # All sentences failed TTS and no audio was emitted → fallback played
+    fb.play.assert_awaited_once_with("tts_fail")
+    # error_flag reflects the TTS failure
+    assert log_repo.log_turn.call_args.kwargs["error_flag"] == "tts_fail"
