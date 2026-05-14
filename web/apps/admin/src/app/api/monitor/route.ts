@@ -1,5 +1,6 @@
 import { prisma } from "@taigi-flow/db";
 import { ok, handleError } from "@/lib/api";
+import { avg } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,6 @@ export async function GET(): Promise<Response> {
         },
       }),
     ]);
-
-    function avg(values: (number | null)[]): number | null {
-      const nums = values.filter((v): v is number => v !== null);
-      return nums.length > 0 ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
-    }
 
     const avgFirstAudio = avg(recentLogs.map((l) => l.latencyFirstAudio));
     const avgLlmFirstTok = avg(recentLogs.map((l) => l.latencyLlmFirstTok));

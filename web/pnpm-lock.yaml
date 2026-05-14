@@ -38,9 +38,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      dotenv:
-        specifier: ^16.4.7
-        version: 16.6.1
       lucide-react:
         specifier: ^1.8.0
         version: 1.8.0(react@19.2.6)
@@ -158,12 +155,6 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
 
-  packages/api-client:
-    devDependencies:
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-
   packages/db:
     dependencies:
       '@prisma/adapter-pg':
@@ -203,12 +194,6 @@ importers:
       zod:
         specifier: ^3.24.2
         version: 3.25.76
-    devDependencies:
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
-
-  packages/ui:
     devDependencies:
       typescript:
         specifier: ^5.8.3

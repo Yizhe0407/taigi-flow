@@ -1,5 +1,6 @@
 import { getRedis } from "@/lib/redis";
 import { prisma } from "@taigi-flow/db";
+import { avg } from "@/lib/stats";
 
 export const dynamic = "force-dynamic";
 
@@ -28,11 +29,6 @@ async function fetchStats() {
       select: { latencyFirstAudio: true, latencyLlmFirstTok: true, latencyAsrEnd: true, errorFlag: true },
     }),
   ]);
-
-  function avg(values: (number | null)[]): number | null {
-    const nums = values.filter((v): v is number => v !== null);
-    return nums.length > 0 ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
-  }
 
   return {
     activeSessions,
