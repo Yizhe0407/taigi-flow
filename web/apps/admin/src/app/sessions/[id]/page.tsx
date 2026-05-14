@@ -19,6 +19,19 @@ export default async function SessionDetailPage({
   const turns = await prisma.interactionLog.findMany({
     where: { sessionId: id },
     orderBy: { turnIndex: "asc" },
+    take: 500,
+    select: {
+      id: true,
+      turnIndex: true,
+      userAsrText: true,
+      llmRawText: true,
+      hanloText: true,
+      taibunText: true,
+      latencyFirstAudio: true,
+      latencyTotal: true,
+      wasBargedIn: true,
+      errorFlag: true,
+    },
   });
 
   return (

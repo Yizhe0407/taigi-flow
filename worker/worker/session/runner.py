@@ -127,12 +127,14 @@ class PipelineRunner:
         chunk_size = 640
         first_frame = True
         n_full = len(pcm) // chunk_size
+        # memoryview avoids allocating a new bytes object per slice.
+        mv = memoryview(pcm)
         for j in range(n_full):
             if first_frame:
                 if on_first_audio is not None:
                     on_first_audio()
                 first_frame = False
-            sub = pcm[j * chunk_size : (j + 1) * chunk_size]
+            sub = mv[j * chunk_size : (j + 1) * chunk_size]
             await self._audio_source.capture_frame(
                 rtc.AudioFrame(
                     data=sub,
@@ -142,14 +144,15 @@ class PipelineRunner:
                 )
             )
             self._vc.mark_tts_output()
-        leftover = pcm[n_full * chunk_size :]
-        if leftover:
+        leftover_len = len(pcm) - n_full * chunk_size
+        if leftover_len:
             if first_frame and on_first_audio is not None:
                 on_first_audio()
-            padded = leftover + b"\x00" * (chunk_size - len(leftover))
+            padded = bytearray(chunk_size)
+            padded[:leftover_len] = mv[n_full * chunk_size :]
             await self._audio_source.capture_frame(
                 rtc.AudioFrame(
-                    data=padded,
+                    data=bytes(padded),
                     sample_rate=16000,
                     num_channels=1,
                     samples_per_channel=chunk_size // 2,

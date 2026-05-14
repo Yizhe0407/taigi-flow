@@ -31,6 +31,9 @@ class PiperTTS:
         self.speaker_id = speaker_id
         self._clear_event = asyncio.Event()
         self.executor = ThreadPoolExecutor(max_workers=1)
+        # Lazy-init session on first HTTP call so this remains usable without an
+        # active asyncio loop (e.g. tests that import the class).
+        self._http_session: aiohttp.ClientSession | None = None
 
         # api_url is checked at init to decide whether to load the local model.
         # All other config is re-read on each synthesize() call so that env changes
@@ -39,6 +42,13 @@ class PiperTTS:
         self.voice: PiperVoice | None = None
         if not api_url:
             self.voice = PiperVoice.load(model_path)
+
+    async def _get_http_session(self) -> aiohttp.ClientSession:
+        if self._http_session is None or self._http_session.closed:
+            self._http_session = aiohttp.ClientSession(
+                timeout=aiohttp.ClientTimeout(total=30)
+            )
+        return self._http_session
 
     @property
     def api_url(self) -> str | None:
@@ -134,14 +144,11 @@ class PiperTTS:
             "length_scale": round(1.0 / max(self.api_speed, 0.1), 4),
         }
 
+        session = await self._get_http_session()
         last_error: Exception | None = None
         for _attempt in range(1, 4):
             try:
-                timeout = aiohttp.ClientTimeout(total=30)
-                async with (
-                    aiohttp.ClientSession(timeout=timeout) as session,
-                    session.post(self.api_url, json=payload) as response,
-                ):
+                async with session.post(self.api_url, json=payload) as response:
                     if response.status != 200:
                         text = await response.text()
                         err = RuntimeError(f"TTS API error: {response.status} {text}")
@@ -212,6 +219,12 @@ class PiperTTS:
 
     def clear_queue(self) -> None:
         self._clear_event.set()
+
+    async def aclose(self) -> None:
+        if self._http_session is not None and not self._http_session.closed:
+            await self._http_session.close()
+            self._http_session = None
+        self.executor.shutdown(wait=False)
 
     def close(self) -> None:
         self.executor.shutdown(wait=False)

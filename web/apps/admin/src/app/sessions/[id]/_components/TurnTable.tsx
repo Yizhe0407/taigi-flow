@@ -3,6 +3,20 @@
 import { useState } from "react";
 import type { InteractionLog } from "@taigi-flow/db";
 import { BookPlus, Check, X } from "lucide-react";
+
+export type TurnView = Pick<
+  InteractionLog,
+  | "id"
+  | "turnIndex"
+  | "userAsrText"
+  | "llmRawText"
+  | "hanloText"
+  | "taibunText"
+  | "latencyFirstAudio"
+  | "latencyTotal"
+  | "wasBargedIn"
+  | "errorFlag"
+>;
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -28,7 +42,7 @@ type Filter = { bargedIn: boolean; hasError: boolean; minLatency: string };
 
 type AddDictState = { logId: string; term: string; replacement: string };
 
-export default function TurnTable({ turns }: { turns: InteractionLog[] }) {
+export default function TurnTable({ turns }: { turns: TurnView[] }) {
   const [filter, setFilter] = useState<Filter>({ bargedIn: false, hasError: false, minLatency: "" });
   const [addDict, setAddDict] = useState<AddDictState | null>(null);
   const [addBusy, setAddBusy] = useState(false);

@@ -24,6 +24,7 @@ async function fetchStats() {
       },
     }),
     prisma.interactionLog.findMany({
+      where: { createdAt: { gte: new Date(Date.now() - 5 * 60_000) } },
       orderBy: { createdAt: "desc" },
       take: 100,
       select: { latencyFirstAudio: true, latencyLlmFirstTok: true, latencyAsrEnd: true, errorFlag: true },
