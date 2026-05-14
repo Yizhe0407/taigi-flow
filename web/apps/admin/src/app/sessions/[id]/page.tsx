@@ -7,16 +7,17 @@ export const dynamic = "force-dynamic";
 export default async function SessionDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
   const session = await prisma.session.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { agentProfile: { select: { name: true } } },
   });
   if (!session) notFound();
 
   const turns = await prisma.interactionLog.findMany({
-    where: { sessionId: params.id },
+    where: { sessionId: id },
     orderBy: { turnIndex: "asc" },
   });
 
