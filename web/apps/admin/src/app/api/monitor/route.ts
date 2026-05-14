@@ -18,6 +18,8 @@ export async function GET(): Promise<Response> {
         take: 100,
         select: {
           latencyFirstAudio: true,
+          latencyLlmFirstTok: true,
+          latencyAsrEnd: true,
           latencyTotal: true,
           errorFlag: true,
           createdAt: true,
@@ -25,14 +27,14 @@ export async function GET(): Promise<Response> {
       }),
     ]);
 
-    const withLatency = recentLogs.filter((l) => l.latencyFirstAudio !== null);
-    const avgFirstAudio =
-      withLatency.length > 0
-        ? Math.round(
-            withLatency.reduce((s, l) => s + (l.latencyFirstAudio ?? 0), 0) /
-              withLatency.length,
-          )
-        : null;
+    function avg(values: (number | null)[]): number | null {
+      const nums = values.filter((v): v is number => v !== null);
+      return nums.length > 0 ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
+    }
+
+    const avgFirstAudio = avg(recentLogs.map((l) => l.latencyFirstAudio));
+    const avgLlmFirstTok = avg(recentLogs.map((l) => l.latencyLlmFirstTok));
+    const avgAsr = avg(recentLogs.map((l) => l.latencyAsrEnd));
 
     const errorCount = recentLogs.filter((l) => l.errorFlag !== null).length;
     const errorRate =
@@ -44,6 +46,8 @@ export async function GET(): Promise<Response> {
       activeSessions,
       recentTurns: recentLogs.length,
       avgFirstAudioMs: avgFirstAudio,
+      avgLlmFirstTokMs: avgLlmFirstTok,
+      avgAsrMs: avgAsr,
       errorRate,
     });
   } catch (err) {

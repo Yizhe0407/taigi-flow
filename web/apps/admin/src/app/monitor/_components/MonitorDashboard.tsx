@@ -12,7 +12,13 @@ type LiveEvent =
   | { type: "tts_first_audio"; sessionId: string; latencyMs: number; ts: number }
   | { type: "turn_done"; sessionId: string; fullResponse: string; latencyAsrMs: number | null; latencyLlmFirstTokMs: number | null; latencyFirstAudioMs: number | null; wasBargedIn: boolean; errorFlag: string | null; ts: number };
 
-type Stats = { activeSessions: number; avgFirstAudioMs: number | null; errorRate: number };
+type Stats = {
+  activeSessions: number;
+  avgFirstAudioMs: number | null;
+  avgLlmFirstTokMs: number | null;
+  avgAsrMs: number | null;
+  errorRate: number;
+};
 
 // One conversation = one group of events with the same session burst
 type ConversationTurn = {
@@ -133,12 +139,18 @@ export default function MonitorDashboard() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-2 gap-3 mb-6 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard label="進行中 Session" value={stats ? String(stats.activeSessions) : "—"}
           color={stats?.activeSessions ? "green" : "gray"} />
-        <StatCard label="首音延遲（近 100 輪均值）"
+        <StatCard label="首音延遲均值"
           value={stats?.avgFirstAudioMs != null ? `${stats.avgFirstAudioMs} ms` : "—"}
           color={stats?.avgFirstAudioMs == null ? "gray" : stats.avgFirstAudioMs < 1200 ? "green" : stats.avgFirstAudioMs < 2500 ? "yellow" : "red"} />
+        <StatCard label="LLM 首字均值"
+          value={stats?.avgLlmFirstTokMs != null ? `${stats.avgLlmFirstTokMs} ms` : "—"}
+          color={stats?.avgLlmFirstTokMs == null ? "gray" : stats.avgLlmFirstTokMs < 800 ? "green" : stats.avgLlmFirstTokMs < 1500 ? "yellow" : "red"} />
+        <StatCard label="ASR 均值"
+          value={stats?.avgAsrMs != null ? `${stats.avgAsrMs} ms` : "—"}
+          color={stats?.avgAsrMs == null ? "gray" : stats.avgAsrMs < 600 ? "green" : stats.avgAsrMs < 1200 ? "yellow" : "red"} />
         <StatCard label="錯誤率（近 100 輪）"
           value={stats ? `${stats.errorRate}%` : "—"}
           color={!stats ? "gray" : stats.errorRate === 0 ? "green" : stats.errorRate < 5 ? "yellow" : "red"} />

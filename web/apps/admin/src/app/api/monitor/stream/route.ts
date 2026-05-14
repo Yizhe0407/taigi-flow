@@ -25,22 +25,20 @@ async function fetchStats() {
     prisma.interactionLog.findMany({
       orderBy: { createdAt: "desc" },
       take: 100,
-      select: { latencyFirstAudio: true, errorFlag: true },
+      select: { latencyFirstAudio: true, latencyLlmFirstTok: true, latencyAsrEnd: true, errorFlag: true },
     }),
   ]);
 
-  const withLatency = recent.filter((l) => l.latencyFirstAudio !== null);
-  const avgFirstAudio =
-    withLatency.length > 0
-      ? Math.round(
-          withLatency.reduce((s, l) => s + (l.latencyFirstAudio ?? 0), 0) /
-            withLatency.length,
-        )
-      : null;
+  function avg(values: (number | null)[]): number | null {
+    const nums = values.filter((v): v is number => v !== null);
+    return nums.length > 0 ? Math.round(nums.reduce((s, v) => s + v, 0) / nums.length) : null;
+  }
 
   return {
     activeSessions,
-    avgFirstAudioMs: avgFirstAudio,
+    avgFirstAudioMs: avg(recent.map((l) => l.latencyFirstAudio)),
+    avgLlmFirstTokMs: avg(recent.map((l) => l.latencyLlmFirstTok)),
+    avgAsrMs: avg(recent.map((l) => l.latencyAsrEnd)),
     errorRate:
       recent.length > 0
         ? Math.round(
