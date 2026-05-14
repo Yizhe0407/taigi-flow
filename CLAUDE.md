@@ -107,7 +107,19 @@ worker/worker/
 ├── db/             # 資料存取層（models、repositories、session、time）
 ├── tools/          # Function calling tools
 └── observability/  # 延遲計時器
+
+web/apps/admin/src/
+├── app/
+│   ├── api/        # 薄 Controller（請求解析、呼叫 service、回傳 JSON）
+│   └── (pages)/    # RSC 頁面，直接查 DB 或呼叫 service
+└── lib/
+    ├── services/   # 業務邏輯層（跨多模型的 transaction、複雜 upsert 等）
+    ├── api.ts      # HTTP 回應工具（ok / error / handleError / parseJson）
+    ├── redis.ts    # Redis 連線
+    └── utils.ts    # cn() 等共用工具
 ```
+
+**原則**：簡單 CRUD 直接在 page / API route 查 DB；有跨模型 transaction 或可複用的業務邏輯才抽進 `lib/services/`。
 
 ---
 
