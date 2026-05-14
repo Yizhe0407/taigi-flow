@@ -38,3 +38,21 @@ export async function updateAgentProfile(
   }
   return prisma.agentProfile.update({ where: { id }, data });
 }
+
+/**
+ * Create an AgentProfile. When the new profile is active, deactivate all
+ * others atomically — required because the DB has a partial unique index
+ * preventing more than one active profile at a time.
+ */
+export async function createAgentProfile(data: Prisma.AgentProfileCreateInput) {
+  if (data.isActive === true) {
+    return prisma.$transaction(async (tx) => {
+      await tx.agentProfile.updateMany({
+        where: { isActive: true },
+        data: { isActive: false },
+      });
+      return tx.agentProfile.create({ data });
+    });
+  }
+  return prisma.agentProfile.create({ data });
+}

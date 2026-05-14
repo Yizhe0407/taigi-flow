@@ -90,11 +90,11 @@ async function main() {
       },
       ragConfig: undefined,
       tools: [],
-      isActive: true,
+      isActive: false,
     },
   });
 
-  console.log("Seed complete: AgentProfiles '公車站長' and '小助手' created.");
+  console.log("Seed complete: AgentProfiles '公車站長' (active) and '小助手' (inactive) created.");
 }
 
 main()
