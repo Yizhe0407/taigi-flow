@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   ChevronDown,
   ChevronRight,
@@ -65,6 +66,7 @@ export default function KnowledgeCollection({
   initialChunks,
   initialJobs,
 }: Props) {
+  const router = useRouter();
   const [chunks, setChunks] = useState<Chunk[]>(initialChunks);
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [uploading, setUploading] = useState(false);
@@ -79,12 +81,25 @@ export default function KnowledgeCollection({
 
   const refresh = useCallback(async () => {
     const [chunksRes, jobsRes] = await Promise.all([
-      fetch(`/api/knowledge/${collectionId}/chunks`),
-      fetch(`/api/knowledge/${collectionId}/jobs`),
+      fetch(`/api/knowledge/${collectionId}/chunks`, { cache: "no-store" }),
+      fetch(`/api/knowledge/${collectionId}/jobs`, { cache: "no-store" }),
     ]);
     if (chunksRes.ok) setChunks(await chunksRes.json());
     if (jobsRes.ok) setJobs(await jobsRes.json());
   }, [collectionId]);
+
+  const syncAfterMutation = useCallback(async () => {
+    await refresh();
+    startTransition(() => router.refresh());
+  }, [refresh, router]);
+
+  useEffect(() => {
+    setChunks(initialChunks);
+  }, [initialChunks]);
+
+  useEffect(() => {
+    setJobs(initialJobs);
+  }, [initialJobs]);
 
   useEffect(() => {
     const hasActive = jobs.some(
@@ -170,7 +185,7 @@ export default function KnowledgeCollection({
       setSelectedFile(null);
       if (fileRef.current) fileRef.current.value = "";
       toast.success(`「${selectedFile.name}」上傳成功，等待 ingest worker 處理`);
-      await refresh();
+      await syncAfterMutation();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "上傳失敗");
     } finally {
@@ -187,11 +202,19 @@ export default function KnowledgeCollection({
       const res = await fetch(`/api/knowledge/${collectionId}/jobs/${jobId}`, {
         method: "DELETE",
       });
-      if (res.ok) {
-        setJobs((prev) => prev.filter((j) => j.id !== jobId));
-        setChunks((prev) => prev.filter((c) => c.metadata.jobId !== jobId));
-        setExpandedJobs((prev) => { const s = new Set(prev); s.delete(jobId); return s; });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "刪除失敗" }));
+        throw new Error(typeof data.error === "string" ? data.error : "刪除失敗");
       }
+      setExpandedJobs((prev) => {
+        const next = new Set(prev);
+        next.delete(jobId);
+        return next;
+      });
+      await syncAfterMutation();
+      toast.success(`已刪除「${fileName}」`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除失敗");
     } finally {
       setDeletingJob(null);
     }
@@ -204,7 +227,26 @@ export default function KnowledgeCollection({
         `/api/knowledge/${collectionId}/chunks/${chunkId}`,
         { method: "DELETE" }
       );
-      if (res.ok) setChunks((prev) => prev.filter((c) => c.id !== chunkId));
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(
+          data && typeof data.error === "string" ? data.error : "刪除 chunk 失敗"
+        );
+      }
+
+      await syncAfterMutation();
+      if (data?.jobDeleted) {
+        setExpandedJobs((prev) => {
+          const next = new Set(prev);
+          if (typeof data.jobId === "string") next.delete(data.jobId);
+          return next;
+        });
+        toast.success("已刪除最後一個 chunk，文件已一併移除");
+      } else {
+        toast.success("已刪除 chunk");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除 chunk 失敗");
     } finally {
       setDeletingChunk(null);
     }
@@ -213,9 +255,15 @@ export default function KnowledgeCollection({
   async function deleteCollection() {
     const ok = await confirmDialog({ title: "清空 RAG", description: `確定要刪除「${profileName}」的所有 RAG 內容嗎？此操作無法復原。`, confirmLabel: "清空" });
     if (!ok) return;
-    await fetch(`/api/knowledge/${collectionId}`, { method: "DELETE" });
-    setChunks([]);
-    setJobs([]);
+    const res = await fetch(`/api/knowledge/${collectionId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: "清空失敗" }));
+      toast.error(typeof data.error === "string" ? data.error : "清空失敗");
+      return;
+    }
+    setExpandedJobs(new Set());
+    await syncAfterMutation();
+    toast.success(`已清空「${profileName}」的 RAG 內容`);
   }
 
   return (
@@ -442,10 +490,7 @@ export default function KnowledgeCollection({
                         if (failed > 0) {
                           toast.error(`${failed} 個 chunk 刪除失敗，請重新整理後再試。`);
                         }
-                        const succeeded = grpChunks.filter((_, i) => results[i].ok);
-                        setChunks((prev) =>
-                          prev.filter((c) => !succeeded.some((g) => g.id === c.id))
-                        );
+                        await syncAfterMutation();
                       }}
                       aria-label="刪除此群組所有 chunks"
                     >

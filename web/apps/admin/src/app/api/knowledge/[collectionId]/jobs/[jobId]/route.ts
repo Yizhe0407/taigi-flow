@@ -1,5 +1,8 @@
+import path from "path";
+
 import { prisma } from "@taigi-flow/db";
 import { error, handleError, ok } from "@/lib/api";
+import { deleteUploadedFile } from "@/app/api/knowledge/_lib/files";
 
 export const dynamic = "force-dynamic";
 
@@ -12,16 +15,20 @@ export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> 
     const job = await prisma.ingestJob.findUnique({ where: { id: jobId } });
     if (!job || job.collectionId !== collectionId) return error("Job not found", 404);
 
-    const srcName = job.filePath.split("/").pop() ?? "";
-    await prisma.$executeRaw`
-      DELETE FROM "KnowledgeChunk"
-      WHERE "collectionId" = ${collectionId}
-        AND (
-          metadata->>'jobId' = ${jobId}
-          OR (metadata->>'jobId' IS NULL AND metadata->>'source' = ${srcName})
-        )
-    `;
-    await prisma.ingestJob.delete({ where: { id: jobId } });
+    const srcName = path.basename(job.filePath);
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`
+        DELETE FROM "KnowledgeChunk"
+        WHERE "collectionId" = ${collectionId}
+          AND (
+            metadata->>'jobId' = ${jobId}
+            OR (metadata->>'jobId' IS NULL AND metadata->>'source' = ${srcName})
+          )
+      `;
+      await tx.ingestJob.delete({ where: { id: jobId } });
+    });
+
+    await deleteUploadedFile(job.filePath);
 
     return ok({ deleted: true });
   } catch (err) {
