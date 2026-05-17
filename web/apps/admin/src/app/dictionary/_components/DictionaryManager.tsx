@@ -55,14 +55,25 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
     return e.term.toLowerCase().includes(q) || e.replacement.toLowerCase().includes(q);
   });
 
+  async function errorMessage(res: Response, fallback: string) {
+    const data = await res.json().catch(() => null);
+    if (data && typeof data.error === "string") return data.error;
+    return `${fallback} (${res.status})`;
+  }
+
   async function handleTabChange(t: string) {
     setTab(t);
     if (loadedTabs.has(t)) return;
-    const pid = t === "global" ? "global" : t;
-    const res = await fetch(`/api/dictionary?profileId=${pid}`);
-    const data = await res.json() as { items: PronunciationEntry[] };
-    setEntries((prev) => ({ ...prev, [t]: data.items }));
-    setLoadedTabs((prev) => new Set(prev).add(t));
+    try {
+      const pid = t === "global" ? "global" : t;
+      const res = await fetch(`/api/dictionary?profileId=${pid}`);
+      if (!res.ok) throw new Error(await errorMessage(res, "載入字典失敗"));
+      const data = await res.json() as { items: PronunciationEntry[] };
+      setEntries((prev) => ({ ...prev, [t]: data.items }));
+      setLoadedTabs((prev) => new Set(prev).add(t));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "載入字典失敗");
+    }
   }
 
   async function saveNew() {
@@ -80,11 +91,14 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
           note: newForm.note || null,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await errorMessage(res, "新增失敗"));
       const entry = await res.json() as PronunciationEntry;
       setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
       setAdding(false);
       setNewForm({ term: "", replacement: "", priority: "0", note: "" });
+      toast.success("已新增字典條目");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "新增失敗");
     } finally {
       setBusy(false);
     }
@@ -103,13 +117,16 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
           note: editForm.note || null,
         }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await errorMessage(res, "更新失敗"));
       const updated = await res.json() as PronunciationEntry;
       setEntries((prev) => ({
         ...prev,
         [tab]: (prev[tab] ?? []).map((e) => (e.id === updated.id ? updated : e)),
       }));
       setEditId(null);
+      toast.success("已更新字典條目");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "更新失敗");
     } finally {
       setBusy(false);
     }
@@ -121,11 +138,14 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
     setBusy(true);
     try {
       const res = await fetch(`/api/dictionary/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await errorMessage(res, "刪除失敗"));
       setEntries((prev) => ({
         ...prev,
         [tab]: (prev[tab] ?? []).filter((e) => e.id !== id),
       }));
+      toast.success("已刪除字典條目");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除失敗");
     } finally {
       setBusy(false);
     }
@@ -149,33 +169,45 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
   async function importCsv(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).slice(1).filter(Boolean);
     setBusy(true);
     let imported = 0;
-    for (const line of lines) {
-      const cols = parseCsvLine(line);
-      if (!cols[0] || !cols[1]) continue;
-      const res = await fetch("/api/dictionary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profileId,
-          term: cols[0],
-          replacement: cols[1],
-          priority: parseInt(cols[2] ?? "0") || 0,
-          note: cols[3] || null,
-        }),
-      });
-      if (res.ok) {
-        const entry = await res.json() as PronunciationEntry;
-        setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
-        imported++;
+    let failed = 0;
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).slice(1).filter(Boolean);
+      for (const line of lines) {
+        const cols = parseCsvLine(line);
+        if (!cols[0] || !cols[1]) continue;
+        const res = await fetch("/api/dictionary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profileId,
+            term: cols[0],
+            replacement: cols[1],
+            priority: parseInt(cols[2] ?? "0") || 0,
+            note: cols[3] || null,
+          }),
+        });
+        if (res.ok) {
+          const entry = await res.json() as PronunciationEntry;
+          setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
+          imported++;
+        } else {
+          failed++;
+        }
       }
+      if (failed > 0) {
+        toast.error(`匯入完成：${imported} 筆，失敗 ${failed} 筆`);
+      } else {
+        toast.success(`匯入完成：${imported} 筆`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "匯入失敗");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
     }
-    setBusy(false);
-    toast.success(`匯入完成：${imported} 筆`);
-    if (fileRef.current) fileRef.current.value = "";
   }
 
   return (

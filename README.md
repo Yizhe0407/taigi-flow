@@ -89,14 +89,14 @@ cd ../../..
 1. 啟動 Docker 基礎設施（postgres / redis / livekit）
 2. 等待 PostgreSQL 就緒
 3. 套用 pending DB migrations
-4. 開啟 tmux session，三個 pane 同時跑 Playground / Admin / Worker
+4. 開啟 tmux session，同時跑 Playground / Admin / Worker / RAG API
 
 ```
-┌──────────────────────┬───────────────────────┐
-│  Playground :3000    │  Admin :3001           │
-├──────────────────────┴───────────────────────┤
-│  Worker (Python)                             │
-└──────────────────────────────────────────────┘
+┌────────────────────┬────────────────────────┐
+│ Playground :3000   │ Worker (voice)          │
+├────────────────────┼────────────────────────┤
+│ Admin :3001        │ Ingest Worker / RAG API │
+└────────────────────┴────────────────────────┘
 ```
 
 **tmux 第一次用？**
@@ -132,6 +132,7 @@ tmux kill-session -t taigi-flow-dev
 |------|-----|------|
 | Playground | http://localhost:3000 | 使用者語音對話介面 |
 | Admin | http://localhost:3001 | 管理後台 |
+| RAG API | http://localhost:8765 | Admin 檢索測試服務 |
 | LiveKit | ws://localhost:7880 | WebRTC 媒體伺服器 |
 | PostgreSQL | localhost:5432 / DB: `agent_system` | 主資料庫 |
 | Redis | localhost:6379 | LiveKit 佇列 |
@@ -140,15 +141,18 @@ tmux kill-session -t taigi-flow-dev
 
 ### 管理後台（Admin :3001）
 
-後台提供四個頁面：
+完整操作手冊見 [`docs/admin-guide.md`](docs/admin-guide.md)。
+
+後台提供五個主要功能：
 
 | 路徑 | 功能 |
 |------|------|
 | `/agents` | Agent 人格列表、新增、編輯、啟用/停用 |
-| `/sessions` | 對話 session 列表（最近 100） |
+| `/knowledge` | 每個 Role 的 RAG 知識庫、文件上傳、檢索測試與索引診斷 |
+| `/sessions` | 對話 session 列表、篩選、排序、批次刪除 |
 | `/sessions/:id` | 逐 turn 四欄對照（ASR / LLM / HanLo / Taibun）+ 篩選 + 一鍵加入字典 |
 | `/dictionary` | 全域 / Agent 專屬發音字典，支援搜尋、inline 編輯、CSV 匯入/匯出 |
-| `/monitor` | 即時監控（active sessions、首音延遲、錯誤率，每 10s 輪詢） |
+| `/monitor` | 即時監控（active sessions、首音延遲、錯誤率、對話串流） |
 
 ### Playground 測試方式（重要）
 

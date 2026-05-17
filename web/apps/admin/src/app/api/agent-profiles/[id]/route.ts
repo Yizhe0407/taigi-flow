@@ -1,4 +1,4 @@
-import { prisma } from "@taigi-flow/db";
+import { Prisma, prisma } from "@taigi-flow/db";
 import { agentProfileUpdateSchema } from "@taigi-flow/types";
 import { error, handleError, ok, parseJson } from "@/lib/api";
 import {
@@ -31,7 +31,9 @@ export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
       ...(input.description !== undefined && { description: input.description }),
       ...(input.systemPrompt !== undefined && { systemPrompt: input.systemPrompt }),
       ...(input.voiceConfig !== undefined && { voiceConfig: input.voiceConfig }),
-      ...(input.ragConfig !== undefined && { ragConfig: input.ragConfig ?? undefined }),
+      ...(input.ragConfig !== undefined && {
+        ragConfig: input.ragConfig === null ? Prisma.DbNull : input.ragConfig,
+      }),
       ...(input.tools !== undefined && { tools: input.tools }),
       ...(input.isActive !== undefined && { isActive: input.isActive }),
     };

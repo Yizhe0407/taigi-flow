@@ -35,8 +35,8 @@ echo "building tmux session '${SESSION}' (dev mode)..."
 #  │ Playground  │        Worker (voice)            │
 #  │   :3000     ├─────────────────────────────────┤
 #  ├─────────────┤        Ingest Worker             │
-#  │   Admin     │                                  │
-#  │   :3001     │                                  │
+#  │   Admin     ├─────────────────────────────────┤
+#  │   :3001     │        RAG API :8765             │
 #  └─────────────┴─────────────────────────────────┘
 
 # Step 1: Playground on full window (pane 0)
@@ -62,6 +62,12 @@ if [[ "$NO_WORKER" == "false" ]]; then
     -c "$ROOT/worker")
   sleep 0.3
   tmux send-keys -t "${INGEST_PANE}" "uv run python -m worker.ingest" Enter
+
+  RAG_PANE=$(tmux split-window -t "${INGEST_PANE}" -v -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  sleep 0.3
+  tmux send-keys -t "${RAG_PANE}" "uv run python -m worker.rag_server" Enter
 fi
 
 # Step 3: Split left column vertically → Playground (top) + Admin (bottom)

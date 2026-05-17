@@ -62,6 +62,7 @@ kill_port() {
 kill_web_ports() {
   kill_port 3000
   kill_port 3001
+  kill_port 8765
 }
 
 # ── Docker + PostgreSQL ────────────────────────────────────────────────────────
@@ -135,6 +136,7 @@ print_ready_msg() {
   echo ""
   echo "   Playground → http://localhost:3000"
   echo "   Admin      → http://localhost:3001"
+  echo "   RAG API    → http://localhost:8765"
   echo ""
   echo "   ┌─ tmux 基本操作 ──────────────────────────────┐"
   echo "   │  Ctrl+B → 方向鍵   切換 pane                │"

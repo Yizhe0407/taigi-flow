@@ -11,9 +11,32 @@ export default async function KnowledgeCollectionPage({ params }: Props) {
 
   const profile = await prisma.agentProfile.findUnique({
     where: { id: collectionId },
-    select: { id: true, name: true },
+    select: { id: true, name: true, ragConfig: true },
   });
   if (!profile) notFound();
+
+  const rawRagConfig =
+    profile.ragConfig && typeof profile.ragConfig === "object"
+      ? (profile.ragConfig as Record<string, unknown>)
+      : null;
+  const ragConfig = rawRagConfig
+    ? {
+        enabled: rawRagConfig.enabled === true,
+        topK:
+          typeof rawRagConfig.topK === "number" && Number.isFinite(rawRagConfig.topK)
+            ? rawRagConfig.topK
+            : 3,
+        threshold:
+          typeof rawRagConfig.threshold === "number" &&
+          Number.isFinite(rawRagConfig.threshold)
+            ? rawRagConfig.threshold
+            : 0.7,
+        collectionId:
+          typeof rawRagConfig.collectionId === "string"
+            ? rawRagConfig.collectionId
+            : collectionId,
+      }
+    : null;
 
   const [chunks, jobs] = await Promise.all([
     prisma.$queryRaw<
@@ -44,6 +67,7 @@ export default async function KnowledgeCollectionPage({ params }: Props) {
     <KnowledgeCollection
       profileName={profile.name}
       collectionId={collectionId}
+      ragConfig={ragConfig}
       initialChunks={chunks}
       initialJobs={jobs}
     />

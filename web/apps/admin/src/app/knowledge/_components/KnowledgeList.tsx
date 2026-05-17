@@ -1,5 +1,6 @@
 "use client";
 
+import { startTransition, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -15,6 +16,12 @@ type Item = {
 
 export default function KnowledgeList({ items }: { items: Item[] }) {
   const router = useRouter();
+  const [rows, setRows] = useState(items);
+  const [clearingId, setClearingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRows(items);
+  }, [items]);
 
   async function deleteCollection(e: React.MouseEvent, item: Item) {
     e.stopPropagation();
@@ -24,16 +31,26 @@ export default function KnowledgeList({ items }: { items: Item[] }) {
       confirmLabel: "清空",
     });
     if (!ok) return;
-    const res = await fetch(`/api/knowledge/${item.id}`, { method: "DELETE" });
-    if (res.ok) {
+    setClearingId(item.id);
+    try {
+      const res = await fetch(`/api/knowledge/${item.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "清空失敗" }));
+        throw new Error(typeof data.error === "string" ? data.error : "清空失敗");
+      }
+      setRows((prev) =>
+        prev.map((row) => (row.id === item.id ? { ...row, chunkCount: 0 } : row))
+      );
       toast.success(`已清空「${item.name}」的 RAG 內容`);
-      router.refresh();
-    } else {
-      toast.error("清空失敗");
+      startTransition(() => router.refresh());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "清空失敗");
+    } finally {
+      setClearingId(null);
     }
   }
 
-  if (items.length === 0) {
+  if (rows.length === 0) {
     return (
       <p className="text-muted-foreground text-sm py-8 text-center">
         尚無 Role。請先在「Role」頁面建立。
@@ -43,7 +60,7 @@ export default function KnowledgeList({ items }: { items: Item[] }) {
 
   return (
     <div className="space-y-2">
-      {items.map((item) => (
+      {rows.map((item) => (
         <div
           key={item.id}
           className="flex items-center justify-between border border-border rounded-lg px-4 py-3 bg-card hover:bg-accent/30 cursor-pointer transition-colors"
@@ -69,6 +86,7 @@ export default function KnowledgeList({ items }: { items: Item[] }) {
               variant="ghost"
               size="icon-sm"
               title="清空 RAG"
+              disabled={clearingId === item.id}
               className="text-muted-foreground hover:text-destructive"
               onClick={(e) => void deleteCollection(e, item)}
             >

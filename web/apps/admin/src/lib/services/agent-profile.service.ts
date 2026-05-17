@@ -1,11 +1,17 @@
 import { prisma } from "@taigi-flow/db";
 import type { Prisma } from "@taigi-flow/db";
+import { deleteUploadedFile } from "@/app/api/knowledge/_lib/files";
 
 /**
  * Cascade-delete an AgentProfile together with all its Sessions and InteractionLogs.
  * Prisma does not set up ON DELETE CASCADE in schema, so we handle it manually.
  */
 export async function deleteAgentProfileCascade(id: string): Promise<void> {
+  const ingestJobs = await prisma.ingestJob.findMany({
+    where: { collectionId: id },
+    select: { filePath: true },
+  });
+
   await prisma.$transaction(async (tx) => {
     const sessionIds = (
       await tx.session.findMany({ where: { agentProfileId: id }, select: { id: true } })
@@ -14,8 +20,15 @@ export async function deleteAgentProfileCascade(id: string): Promise<void> {
       await tx.interactionLog.deleteMany({ where: { sessionId: { in: sessionIds } } });
       await tx.session.deleteMany({ where: { id: { in: sessionIds } } });
     }
+    await tx.pronunciationEntry.deleteMany({ where: { profileId: id } });
+    await tx.$executeRaw`
+      DELETE FROM "KnowledgeChunk" WHERE "collectionId" = ${id}
+    `;
+    await tx.ingestJob.deleteMany({ where: { collectionId: id } });
     await tx.agentProfile.delete({ where: { id } });
   });
+
+  await Promise.allSettled(ingestJobs.map((job) => deleteUploadedFile(job.filePath)));
 }
 
 /**

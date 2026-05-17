@@ -85,6 +85,7 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("startedAt");
@@ -92,16 +93,20 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
 
   const fetchSessions = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams({ sortBy, sortDir, limit: "200" });
-    if (agentFilter !== "all") params.set("agentProfileId", agentFilter);
-    if (statusFilter !== "all") params.set("status", statusFilter);
-    const res = await fetch(`/api/sessions?${params}`);
-    if (res.ok) {
+    try {
+      const params = new URLSearchParams({ sortBy, sortDir, limit: "200" });
+      if (agentFilter !== "all") params.set("agentProfileId", agentFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const res = await fetch(`/api/sessions?${params}`);
+      if (!res.ok) throw new Error(await errorMessage(res, "載入對話紀錄失敗"));
       const data = await res.json() as { items: SessionRow[] };
       setRows(data.items);
       setSelected(new Set());
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "載入對話紀錄失敗");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [agentFilter, statusFilter, sortBy, sortDir]);
 
   useEffect(() => { void fetchSessions(); }, [fetchSessions]);
@@ -126,14 +131,26 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   async function deleteRow(id: string) {
     const ok = await confirmDialog({ description: "確定要刪除此對話紀錄？此操作無法復原。", confirmLabel: "刪除" });
     if (!ok) return;
-    await fetch("/api/sessions", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ids: [id] }),
-    });
-    setRows((prev) => prev.filter((r) => r.id !== id));
-    setSelected((prev) => { const s = new Set(prev); s.delete(id); return s; });
-    toast.success("已刪除");
+    setDeletingId(id);
+    try {
+      const res = await fetch("/api/sessions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: [id] }),
+      });
+      if (!res.ok) throw new Error(await errorMessage(res, "刪除失敗"));
+      setRows((prev) => prev.filter((r) => r.id !== id));
+      setSelected((prev) => {
+        const s = new Set(prev);
+        s.delete(id);
+        return s;
+      });
+      toast.success("已刪除");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除失敗");
+    } finally {
+      setDeletingId(null);
+    }
   }
 
   async function deleteSelected() {
@@ -142,15 +159,21 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
       confirmLabel: "刪除",
     });
     if (!ok) return;
+    const ids = Array.from(selected);
+    const idSet = new Set(ids);
     setDeleting(true);
     try {
-      await fetch("/api/sessions", {
+      const res = await fetch("/api/sessions", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: Array.from(selected) }),
+        body: JSON.stringify({ ids }),
       });
-      await fetchSessions();
-      toast.success(`已刪除 ${selected.size} 筆`);
+      if (!res.ok) throw new Error(await errorMessage(res, "批次刪除失敗"));
+      setRows((prev) => prev.filter((row) => !idSet.has(row.id)));
+      setSelected(new Set());
+      toast.success(`已刪除 ${ids.length} 筆`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "批次刪除失敗");
     } finally {
       setDeleting(false);
     }
@@ -259,6 +282,7 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
                       variant="ghost"
                       size="icon-sm"
                       title="刪除"
+                      disabled={deleting || deletingId === row.id}
                       className="text-muted-foreground hover:text-destructive"
                       onClick={() => void deleteRow(row.id)}
                     >
@@ -277,6 +301,12 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
       )}
     </div>
   );
+}
+
+async function errorMessage(res: Response, fallback: string) {
+  const data = await res.json().catch(() => null);
+  if (data && typeof data.error === "string") return data.error;
+  return `${fallback} (${res.status})`;
 }
 
 function NativeSelect({

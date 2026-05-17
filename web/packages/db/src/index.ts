@@ -47,11 +47,12 @@ export const prisma = new Proxy({} as PrismaClient, {
   },
 }) as PrismaClient;
 
+export { Prisma } from "@prisma/client";
+
 export type {
   AgentProfile,
   Session,
   InteractionLog,
   PronunciationEntry,
   KnowledgeChunk,
-  Prisma,
 } from "@prisma/client";

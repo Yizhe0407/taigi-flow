@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { startTransition, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AgentProfile } from "@taigi-flow/db";
@@ -17,6 +17,16 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
   const [profiles, setProfiles] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
 
+  useEffect(() => {
+    setProfiles(initial);
+  }, [initial]);
+
+  async function errorMessage(res: Response, fallback: string) {
+    const data = await res.json().catch(() => null);
+    if (data && typeof data.error === "string") return data.error;
+    return `${fallback} (${res.status})`;
+  }
+
   async function activate(p: AgentProfile) {
     if (p.isActive) return;
     setBusy(p.id);
@@ -26,8 +36,9 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive: true }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await errorMessage(res, "啟用失敗"));
       setProfiles((prev) => prev.map((x) => ({ ...x, isActive: x.id === p.id })));
+      startTransition(() => router.refresh());
       toast.success(`已啟用「${p.name}」`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "啟用失敗");
@@ -47,8 +58,9 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
     setBusy(p.id);
     try {
       const res = await fetch(`/api/agent-profiles/${p.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await errorMessage(res, "刪除失敗"));
       setProfiles((prev) => prev.filter((x) => x.id !== p.id));
+      startTransition(() => router.refresh());
       toast.success(`已刪除「${p.name}」`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "刪除失敗");

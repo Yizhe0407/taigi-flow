@@ -84,7 +84,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
           speed: parseFloat(form.speed) || 1,
           pitch: parseFloat(form.pitch) || 0,
         },
-        ragConfig: form.ragEnabled
+        ragConfig: isEdit && form.ragEnabled
           ? {
               enabled: true,
               collectionId: profile?.id ?? "",
@@ -170,26 +170,31 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
             <CardDescription>每輪對話自動從 RAG 知識庫檢索相關內容</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <label className="flex items-center gap-2.5 cursor-pointer">
-              <Checkbox checked={form.ragEnabled} onCheckedChange={(v) => set("ragEnabled", v)} />
-              <span className="text-sm font-medium">啟用 RAG 檢索</span>
-            </label>
-            {form.ragEnabled && (
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Top-K" htmlFor="ragTopK">
-                  <Input id="ragTopK" type="number" min="1" max="10" step="1" value={form.ragTopK} onChange={(e) => set("ragTopK", e.target.value)} />
-                </Field>
-                <Field label="相似度門檻" htmlFor="ragThreshold">
-                  <Input id="ragThreshold" type="number" min="0" max="1" step="0.05" value={form.ragThreshold} onChange={(e) => set("ragThreshold", e.target.value)} />
-                </Field>
-              </div>
-            )}
             {isEdit && (
-              <p className="text-xs text-muted-foreground">
-                <Link href={`/knowledge/${profile.id}`} className="text-primary hover:underline">
-                  前往 RAG 上傳文件 →
-                </Link>
-              </p>
+              <>
+                <label className="flex items-center gap-2.5 cursor-pointer">
+                  <Checkbox checked={form.ragEnabled} onCheckedChange={(v) => set("ragEnabled", v)} />
+                  <span className="text-sm font-medium">啟用 RAG 檢索</span>
+                </label>
+                {form.ragEnabled && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <Field label="Top-K" htmlFor="ragTopK">
+                      <Input id="ragTopK" type="number" min="1" max="10" step="1" value={form.ragTopK} onChange={(e) => set("ragTopK", e.target.value)} />
+                    </Field>
+                    <Field label="相似度門檻" htmlFor="ragThreshold">
+                      <Input id="ragThreshold" type="number" min="0" max="1" step="0.05" value={form.ragThreshold} onChange={(e) => set("ragThreshold", e.target.value)} />
+                    </Field>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  <Link href={`/knowledge/${profile.id}`} className="text-primary hover:underline">
+                    前往 RAG 上傳文件 →
+                  </Link>
+                </p>
+              </>
+            )}
+            {!isEdit && (
+              <p className="text-sm text-muted-foreground">建立 Role 後即可設定 RAG。</p>
             )}
           </CardContent>
         </Card>
