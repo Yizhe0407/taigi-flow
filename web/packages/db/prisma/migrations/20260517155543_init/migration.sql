@@ -68,10 +68,25 @@ CREATE TABLE "KnowledgeChunk" (
     "collectionId" TEXT NOT NULL,
     "content" TEXT NOT NULL,
     "metadata" JSONB NOT NULL,
-    "embedding" vector(1536),
+    "embedding" vector(1024),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "KnowledgeChunk_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "IngestJob" (
+    "id" TEXT NOT NULL,
+    "collectionId" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "filePath" TEXT NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'pending',
+    "error" TEXT,
+    "chunkCount" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "IngestJob_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -84,13 +99,19 @@ CREATE INDEX "Session_livekitRoom_idx" ON "Session"("livekitRoom");
 CREATE INDEX "InteractionLog_sessionId_turnIndex_idx" ON "InteractionLog"("sessionId", "turnIndex");
 
 -- CreateIndex
+CREATE INDEX "PronunciationEntry_profileId_term_idx" ON "PronunciationEntry"("profileId", "term");
+
+-- CreateIndex
 CREATE INDEX "PronunciationEntry_term_idx" ON "PronunciationEntry"("term");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PronunciationEntry_profileId_term_key" ON "PronunciationEntry"("profileId", "term");
+CREATE INDEX "KnowledgeChunk_collectionId_idx" ON "KnowledgeChunk"("collectionId");
 
 -- CreateIndex
-CREATE INDEX "KnowledgeChunk_collectionId_idx" ON "KnowledgeChunk"("collectionId");
+CREATE INDEX "IngestJob_status_createdAt_idx" ON "IngestJob"("status", "createdAt");
+
+-- CreateIndex
+CREATE INDEX "IngestJob_collectionId_idx" ON "IngestJob"("collectionId");
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_agentProfileId_fkey" FOREIGN KEY ("agentProfileId") REFERENCES "AgentProfile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

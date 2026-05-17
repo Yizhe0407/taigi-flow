@@ -1,4 +1,4 @@
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 
 import { prisma } from "@taigi-flow/db";
@@ -42,14 +42,20 @@ export async function POST(req: Request, { params }: Ctx): Promise<Response> {
     const filePath = path.join(collDir, safeName);
     await writeFile(filePath, buffer);
 
-    const job = await prisma.ingestJob.create({
-      data: {
-        collectionId,
-        fileName: file.name,
-        filePath,
-        status: "pending",
-      },
-    });
+    let job;
+    try {
+      job = await prisma.ingestJob.create({
+        data: {
+          collectionId,
+          fileName: file.name,
+          filePath,
+          status: "pending",
+        },
+      });
+    } catch (err) {
+      await unlink(filePath).catch(() => {});
+      throw err;
+    }
 
     return ok(job, { status: 201 });
   } catch (err) {

@@ -92,6 +92,8 @@ export async function GET(): Promise<Response> {
   const subscriber = getRedis().duplicate();
   await subscriber.connect();
 
+  let cleanup: (() => void) | null = null;
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: string, data: unknown) => {
@@ -120,9 +122,16 @@ export async function GET(): Promise<Response> {
       // Auto-close after MAX_DURATION_MS
       const maxTimer = setTimeout(() => {
         state.closed = true;
-        clearInterval(heartbeat);
+        cleanup?.();
+        subscriber.unsubscribe("taigi:live").catch(() => {});
+        subscriber.disconnect().catch(() => {});
         try { controller.close(); } catch { /* ignore */ }
       }, MAX_DURATION_MS);
+
+      cleanup = () => {
+        clearInterval(heartbeat);
+        clearTimeout(maxTimer);
+      };
 
       // Subscribe to Redis live channel
       try {
@@ -135,17 +144,11 @@ export async function GET(): Promise<Response> {
       } catch (err) {
         send("error", { message: String(err) });
       }
-
-      // Cleanup function stored so cancel() can call it
-      (state as typeof state & { cleanup?: () => void }).cleanup = () => {
-        clearInterval(heartbeat);
-        clearTimeout(maxTimer);
-      };
     },
 
     cancel() {
       state.closed = true;
-      (state as typeof state & { cleanup?: () => void }).cleanup?.();
+      cleanup?.();
       subscriber.unsubscribe("taigi:live").catch(() => {});
       subscriber.disconnect().catch(() => {});
     },

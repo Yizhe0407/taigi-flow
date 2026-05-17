@@ -22,9 +22,17 @@ export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> 
       await tx.ingestJob.deleteMany({ where: { collectionId } });
     });
 
-    await Promise.allSettled(jobs.map((job) => deleteUploadedFile(job.filePath)));
+    const fileResults = await Promise.allSettled(
+      jobs.map((job) => deleteUploadedFile(job.filePath)),
+    );
+    const failedPaths = jobs
+      .map((job, i) => (fileResults[i]!.status === "rejected" ? job.filePath : null))
+      .filter(Boolean);
+    if (failedPaths.length > 0) {
+      console.error("[knowledge DELETE] failed to delete files:", failedPaths);
+    }
 
-    return ok({ deleted: true });
+    return ok({ deleted: true, failedFilePaths: failedPaths });
   } catch (err) {
     return handleError(err);
   }

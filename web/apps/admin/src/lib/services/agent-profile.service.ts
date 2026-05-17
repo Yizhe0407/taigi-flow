@@ -28,7 +28,15 @@ export async function deleteAgentProfileCascade(id: string): Promise<void> {
     await tx.agentProfile.delete({ where: { id } });
   });
 
-  await Promise.allSettled(ingestJobs.map((job) => deleteUploadedFile(job.filePath)));
+  const fileResults = await Promise.allSettled(
+    ingestJobs.map((job) => deleteUploadedFile(job.filePath)),
+  );
+  const failedPaths = ingestJobs
+    .map((job, i) => (fileResults[i]!.status === "rejected" ? job.filePath : null))
+    .filter(Boolean);
+  if (failedPaths.length > 0) {
+    console.error("[deleteAgentProfileCascade] failed to delete files:", failedPaths);
+  }
 }
 
 /**

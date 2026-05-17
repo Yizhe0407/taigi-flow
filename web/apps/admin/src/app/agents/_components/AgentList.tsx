@@ -139,8 +139,8 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                title="刪除"
-                disabled={busy === p.id}
+                title={p.isActive ? "停用後才能刪除" : "刪除"}
+                disabled={busy === p.id || p.isActive}
                 className="text-muted-foreground hover:text-destructive"
                 onClick={(e) => void deleteProfile(e, p)}
               >

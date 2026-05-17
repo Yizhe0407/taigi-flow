@@ -1,5 +1,6 @@
 "use client";
 
+import { Fragment } from "react";
 import { usePathname } from "next/navigation";
 import {
   Breadcrumb,
@@ -38,7 +39,7 @@ export function AppHeader() {
 <Breadcrumb className="flex-1">
         <BreadcrumbList>
           {crumbs.map((crumb, i) => (
-            <span key={crumb.href} className="flex items-center gap-1.5">
+            <Fragment key={crumb.href}>
               {i > 0 && <BreadcrumbSeparator />}
               <BreadcrumbItem>
                 {crumb.isLast ? (
@@ -47,7 +48,7 @@ export function AppHeader() {
                   <BreadcrumbLink href={crumb.href}>{crumb.label}</BreadcrumbLink>
                 )}
               </BreadcrumbItem>
-            </span>
+            </Fragment>
           ))}
         </BreadcrumbList>
       </Breadcrumb>

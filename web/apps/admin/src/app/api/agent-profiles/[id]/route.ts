@@ -51,6 +51,14 @@ export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
 export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> {
   try {
     const { id } = await params;
+    const profile = await prisma.agentProfile.findUnique({
+      where: { id },
+      select: { isActive: true },
+    });
+    if (!profile) return error("AgentProfile not found", 404);
+    if (profile.isActive) {
+      return error("無法刪除啟用中的 Role，請先啟用另一個 Role", 409);
+    }
     await deleteAgentProfileCascade(id);
     return ok({ ok: true });
   } catch (err) {
