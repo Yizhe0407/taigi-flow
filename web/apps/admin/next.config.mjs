@@ -3,11 +3,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-loadEnv({ path: path.resolve(__dirname, "../../../.env") });
+const repoRoot = path.resolve(__dirname, "../../..");
+loadEnv({ path: path.resolve(repoRoot, ".env") });
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@taigi-flow/db", "@taigi-flow/types"],
+  experimental: {
+    outputFileTracingRoot: repoRoot,
+  },
 };
 
 export default nextConfig;

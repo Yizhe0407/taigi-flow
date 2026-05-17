@@ -153,7 +153,7 @@ export default function TurnTable({ turns }: { turns: TurnView[] }) {
                     variant="ghost"
                     size="icon-sm"
                     title="加入字典"
-                    onClick={() => setAddDict({ logId: t.id, term: t.userAsrText, replacement: "" })}
+                    onClick={() => setAddDict({ logId: t.id, term: t.llmRawText ?? t.userAsrText, replacement: "" })}
                     className="text-muted-foreground hover:text-primary"
                   >
                     <BookPlus size={14} />

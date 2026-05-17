@@ -12,7 +12,7 @@ export default async function DictionaryPage() {
     prisma.agentProfile.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
-      where: { isActive: true },
+      where: {},
     }),
   ]);
 

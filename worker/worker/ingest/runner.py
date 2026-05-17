@@ -79,6 +79,14 @@ class IngestRunner:
                 embeddings = await self._embedder.embed_batch(texts)
 
                 async with async_session_factory() as session:
+                    # Guard: admin may delete the job while we embed
+                    still_exists = await session.get(IngestJob, job.id)
+                    if still_exists is None:
+                        logger.warning(
+                            "Job %s deleted during processing, discarding chunks",
+                            job.id,
+                        )
+                        return
                     for chunk, vec in zip(chunks, embeddings, strict=True):
                         session.add(
                             KnowledgeChunk(

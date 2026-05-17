@@ -38,7 +38,8 @@ export default async function KnowledgeCollectionPage({ params }: Props) {
       }
     : null;
 
-  const [chunks, jobs] = await Promise.all([
+  const CHUNK_LIMIT = 500;
+  const [rawChunks, jobs] = await Promise.all([
     prisma.$queryRaw<
       { id: string; content: string; metadata: Record<string, unknown>; createdAt: Date }[]
     >`
@@ -46,6 +47,7 @@ export default async function KnowledgeCollectionPage({ params }: Props) {
       FROM "KnowledgeChunk"
       WHERE "collectionId" = ${collectionId}
       ORDER BY "createdAt" ASC
+      LIMIT ${CHUNK_LIMIT + 1}
     `,
     prisma.ingestJob.findMany({
       where: { collectionId },
@@ -63,12 +65,16 @@ export default async function KnowledgeCollectionPage({ params }: Props) {
     }),
   ]);
 
+  const chunksHasMore = rawChunks.length > CHUNK_LIMIT;
+  const chunks = chunksHasMore ? rawChunks.slice(0, CHUNK_LIMIT) : rawChunks;
+
   return (
     <KnowledgeCollection
       profileName={profile.name}
       collectionId={collectionId}
       ragConfig={ragConfig}
       initialChunks={chunks}
+      initialChunksHasMore={chunksHasMore}
       initialJobs={jobs}
     />
   );

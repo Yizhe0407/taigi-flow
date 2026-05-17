@@ -6,7 +6,7 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -36,6 +36,9 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "dotenv": "^16.6.1",
-    "typescript": "^5.8.3"
+    "eslint": "^9",
+    "eslint-plugin-react-hooks": "^5",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8"
   }
 }

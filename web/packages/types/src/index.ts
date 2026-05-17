@@ -74,9 +74,14 @@ export const sessionBatchDeleteSchema = z.object({
 });
 export type SessionBatchDeleteInput = z.infer<typeof sessionBatchDeleteSchema>;
 
+const boolParam = z
+  .string()
+  .transform((v) => v === "true" || v === "1")
+  .optional();
+
 export const turnFilterSchema = z.object({
-  bargedIn: z.coerce.boolean().optional(),
-  hasError: z.coerce.boolean().optional(),
+  bargedIn: boolParam,
+  hasError: boolParam,
   minLatencyMs: z.coerce.number().int().nonnegative().optional(),
 });
 export type TurnFilter = z.infer<typeof turnFilterSchema>;

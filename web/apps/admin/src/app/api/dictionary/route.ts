@@ -41,9 +41,27 @@ export async function GET(req: Request): Promise<Response> {
 export async function POST(req: Request): Promise<Response> {
   try {
     const input = await parseJson(req, pronunciationCreateSchema);
+    const profileId = input.profileId ?? null;
+
+    const existing = await prisma.pronunciationEntry.findFirst({
+      where: { profileId, term: input.term },
+    });
+
+    if (existing) {
+      const entry = await prisma.pronunciationEntry.update({
+        where: { id: existing.id },
+        data: {
+          replacement: input.replacement,
+          priority: input.priority,
+          ...(input.note !== undefined && { note: input.note ?? null }),
+        },
+      });
+      return ok(entry);
+    }
+
     const entry = await prisma.pronunciationEntry.create({
       data: {
-        profileId: input.profileId ?? null,
+        profileId,
         term: input.term,
         replacement: input.replacement,
         priority: input.priority,

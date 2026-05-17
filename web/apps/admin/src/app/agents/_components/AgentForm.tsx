@@ -89,7 +89,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
               enabled: true,
               collectionId: profile?.id ?? "",
               topK: parseInt(form.ragTopK) || 3,
-              threshold: parseFloat(form.ragThreshold) || 0.7,
+              threshold: form.ragThreshold !== "" ? parseFloat(form.ragThreshold) : 0.7,
             }
           : null,
         tools: form.tools.split(",").map((s) => s.trim()).filter(Boolean),
@@ -213,6 +213,9 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
               <div>
                 <p className="text-sm font-medium">啟用此人格</p>
                 <p className="text-xs text-muted-foreground">啟用後將替換目前使用中的人格</p>
+                {!form.isActive && (
+                  <p className="text-xs text-amber-500 mt-0.5">若所有人格皆停用，Worker 將無人格可用</p>
+                )}
               </div>
             </label>
           </CardContent>

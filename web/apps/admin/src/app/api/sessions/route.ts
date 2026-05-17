@@ -1,6 +1,6 @@
 import { prisma } from "@taigi-flow/db";
 import { sessionBatchDeleteSchema, sessionListQuerySchema } from "@taigi-flow/types";
-import { handleError, ok, parseJson, error } from "@/lib/api";
+import { handleError, ok, parseJson } from "@/lib/api";
 import { deleteSessionsBatch } from "@/lib/services/session.service";
 
 export const dynamic = "force-dynamic";

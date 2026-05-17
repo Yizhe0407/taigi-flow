@@ -90,6 +90,7 @@ type Props = {
   collectionId: string;
   ragConfig: RagConfig;
   initialChunks: Chunk[];
+  initialChunksHasMore: boolean;
   initialJobs: Job[];
 };
 
@@ -142,10 +143,12 @@ export default function KnowledgeCollection({
   collectionId,
   ragConfig,
   initialChunks,
+  initialChunksHasMore,
   initialJobs,
 }: Props) {
   const router = useRouter();
   const [chunks, setChunks] = useState<Chunk[]>(initialChunks);
+  const [chunksHasMore, setChunksHasMore] = useState(initialChunksHasMore);
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -171,7 +174,11 @@ export default function KnowledgeCollection({
       fetch(`/api/knowledge/${collectionId}/chunks`, { cache: "no-store" }),
       fetch(`/api/knowledge/${collectionId}/jobs`, { cache: "no-store" }),
     ]);
-    if (chunksRes.ok) setChunks(await chunksRes.json());
+    if (chunksRes.ok) {
+      const data = await chunksRes.json() as { items: Chunk[]; hasMore: boolean };
+      setChunks(data.items);
+      setChunksHasMore(data.hasMore);
+    }
     if (jobsRes.ok) setJobs(await jobsRes.json());
   }, [collectionId]);
 
@@ -190,7 +197,8 @@ export default function KnowledgeCollection({
 
   useEffect(() => {
     setChunks(initialChunks);
-  }, [initialChunks]);
+    setChunksHasMore(initialChunksHasMore);
+  }, [initialChunks, initialChunksHasMore]);
 
   useEffect(() => {
     setJobs(initialJobs);
@@ -372,8 +380,8 @@ export default function KnowledgeCollection({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           query,
-          topK: Number(queryTopK) || 3,
-          threshold: Number(queryThreshold) || 0.7,
+          topK: queryTopK !== "" ? Number(queryTopK) : 3,
+          threshold: queryThreshold !== "" ? Number(queryThreshold) : 0.7,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -460,11 +468,13 @@ export default function KnowledgeCollection({
         />
         <MetricCard
           label="Chunks"
-          value={String(chunks.length)}
+          value={`${chunks.length}${chunksHasMore ? "+" : ""}`}
           hint={
-            orphanChunks.length > 0
-              ? `${orphanChunks.length} 個缺少文件紀錄`
-              : "孤兒 0"
+            chunksHasMore
+              ? "超過 500 筆，僅顯示前 500"
+              : orphanChunks.length > 0
+                ? `${orphanChunks.length} 個缺少文件紀錄`
+                : "孤兒 0"
           }
         />
         <MetricCard

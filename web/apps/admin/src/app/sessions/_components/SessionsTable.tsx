@@ -82,6 +82,7 @@ function SortHeader({
 export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   const router = useRouter();
   const [rows, setRows] = useState<SessionRow[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
@@ -99,8 +100,9 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
       if (statusFilter !== "all") params.set("status", statusFilter);
       const res = await fetch(`/api/sessions?${params}`);
       if (!res.ok) throw new Error(await errorMessage(res, "載入對話紀錄失敗"));
-      const data = await res.json() as { items: SessionRow[] };
+      const data = await res.json() as { items: SessionRow[]; nextCursor: string | null };
       setRows(data.items);
+      setNextCursor(data.nextCursor);
       setSelected(new Set());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "載入對話紀錄失敗");
@@ -123,7 +125,8 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   function toggleRow(id: string, checked: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      checked ? next.add(id) : next.delete(id);
+      if (checked) next.add(id);
+      else next.delete(id);
       return next;
     });
   }
@@ -297,7 +300,10 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
       </div>
 
       {!loading && rows.length > 0 && (
-        <p className="text-xs text-muted-foreground">{rows.length} 筆紀錄</p>
+        <p className="text-xs text-muted-foreground">
+          {rows.length} 筆紀錄
+          {nextCursor && "（僅顯示前 200 筆，更多資料未載入）"}
+        </p>
       )}
     </div>
   );

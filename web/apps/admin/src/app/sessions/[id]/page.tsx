@@ -19,7 +19,6 @@ export default async function SessionDetailPage({
     prisma.interactionLog.findMany({
       where: { sessionId: id },
       orderBy: { turnIndex: "asc" },
-      take: 500,
       select: {
         id: true,
         turnIndex: true,

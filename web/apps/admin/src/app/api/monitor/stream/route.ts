@@ -90,7 +90,13 @@ export async function GET(): Promise<Response> {
 
   // Each SSE connection gets its own Redis subscriber connection (required for SUBSCRIBE)
   const subscriber = getRedis().duplicate();
-  await subscriber.connect();
+  let redisReady = false;
+  try {
+    await subscriber.connect();
+    redisReady = true;
+  } catch {
+    // Redis unavailable — degrade gracefully: stats/history still served via DB
+  }
 
   let cleanup: (() => void) | null = null;
 
@@ -123,8 +129,10 @@ export async function GET(): Promise<Response> {
       const maxTimer = setTimeout(() => {
         state.closed = true;
         cleanup?.();
-        subscriber.unsubscribe("taigi:live").catch(() => {});
-        subscriber.disconnect().catch(() => {});
+        if (redisReady) {
+          subscriber.unsubscribe("taigi:live").catch(() => {});
+          subscriber.disconnect().catch(() => {});
+        }
         try { controller.close(); } catch { /* ignore */ }
       }, MAX_DURATION_MS);
 
@@ -133,24 +141,28 @@ export async function GET(): Promise<Response> {
         clearTimeout(maxTimer);
       };
 
-      // Subscribe to Redis live channel
-      try {
-        await subscriber.subscribe("taigi:live", (message) => {
-          if (state.closed) return;
-          try {
-            send("live", JSON.parse(message));
-          } catch { /* malformed JSON, skip */ }
-        });
-      } catch (err) {
-        send("error", { message: String(err) });
+      // Subscribe to Redis live channel (skip if Redis unavailable)
+      if (redisReady) {
+        try {
+          await subscriber.subscribe("taigi:live", (message) => {
+            if (state.closed) return;
+            try {
+              send("live", JSON.parse(message));
+            } catch { /* malformed JSON, skip */ }
+          });
+        } catch (err) {
+          send("error", { message: String(err) });
+        }
       }
     },
 
     cancel() {
       state.closed = true;
       cleanup?.();
-      subscriber.unsubscribe("taigi:live").catch(() => {});
-      subscriber.disconnect().catch(() => {});
+      if (redisReady) {
+        subscriber.unsubscribe("taigi:live").catch(() => {});
+        subscriber.disconnect().catch(() => {});
+      }
     },
   });
 

@@ -44,7 +44,10 @@ export default function MonitorDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [turns, setTurns] = useState<ConversationTurn[]>([]);
   const [connected, setConnected] = useState(false);
+  // pending: turnId → turn. activeTurnId: sessionId → current turnId.
+  // Two-map approach avoids barge-in race where sessionId key would get overwritten.
   const pending = useRef<Map<string, ConversationTurn>>(new Map());
+  const activeTurnId = useRef<Map<string, string>>(new Map());
 
   useEffect(() => {
     const es = new EventSource("/api/monitor/stream");
@@ -90,13 +93,25 @@ export default function MonitorDashboard() {
     es.onerror = () => setConnected(false);
 
     return () => es.close();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function handleLiveEvent(event: LiveEvent) {
     if (event.type === "asr") {
+      const turnId = `${event.sessionId}-${event.ts}`;
+
+      // Barge-in: finalize any prior pending turn for this session
+      const prevTurnId = activeTurnId.current.get(event.sessionId);
+      if (prevTurnId) {
+        const prevTurn = pending.current.get(prevTurnId);
+        if (prevTurn) {
+          const finalized = { ...prevTurn, wasBargedIn: true, done: true };
+          pending.current.delete(prevTurnId);
+          setTurns((prev) => prev.map((t) => (t.id === prevTurnId ? finalized : t)));
+        }
+      }
+
       const turn: ConversationTurn = {
-        id: `${event.sessionId}-${event.ts}`,
+        id: turnId,
         sessionId: event.sessionId,
         agentName: event.agentName,
         asr: event.text,
@@ -109,11 +124,13 @@ export default function MonitorDashboard() {
         done: false,
         ts: event.ts,
       };
-      pending.current.set(event.sessionId, turn);
+      pending.current.set(turnId, turn);
+      activeTurnId.current.set(event.sessionId, turnId);
       setTurns((prev) => [turn, ...prev].slice(0, MAX_TURNS));
     } else if (event.type === "llm_sentence") {
-      const turn = pending.current.get(event.sessionId);
-      if (turn) {
+      const turnId = activeTurnId.current.get(event.sessionId);
+      const turn = turnId ? pending.current.get(turnId) : undefined;
+      if (turnId && turn) {
         const updated = {
           ...turn,
           sentences: [
@@ -121,23 +138,21 @@ export default function MonitorDashboard() {
             { sentence: event.sentence, hanlo: event.hanlo, taibun: event.taibun },
           ],
         };
-        pending.current.set(event.sessionId, updated);
-        setTurns((prev) =>
-          prev.map((t) => (t.id === updated.id ? updated : t)),
-        );
+        pending.current.set(turnId, updated);
+        setTurns((prev) => prev.map((t) => (t.id === turnId ? updated : t)));
       }
     } else if (event.type === "tts_first_audio") {
-      const turn = pending.current.get(event.sessionId);
-      if (turn) {
+      const turnId = activeTurnId.current.get(event.sessionId);
+      const turn = turnId ? pending.current.get(turnId) : undefined;
+      if (turnId && turn) {
         const updated = { ...turn, latencyFirstAudioMs: event.latencyMs };
-        pending.current.set(event.sessionId, updated);
-        setTurns((prev) =>
-          prev.map((t) => (t.id === updated.id ? updated : t)),
-        );
+        pending.current.set(turnId, updated);
+        setTurns((prev) => prev.map((t) => (t.id === turnId ? updated : t)));
       }
     } else if (event.type === "turn_done") {
-      const turn = pending.current.get(event.sessionId);
-      if (turn) {
+      const turnId = activeTurnId.current.get(event.sessionId);
+      const turn = turnId ? pending.current.get(turnId) : undefined;
+      if (turnId && turn) {
         const updated: ConversationTurn = {
           ...turn,
           latencyAsrMs: event.latencyAsrMs,
@@ -147,10 +162,9 @@ export default function MonitorDashboard() {
           errorFlag: event.errorFlag,
           done: true,
         };
-        pending.current.delete(event.sessionId);
-        setTurns((prev) =>
-          prev.map((t) => (t.id === updated.id ? updated : t)),
-        );
+        pending.current.delete(turnId);
+        activeTurnId.current.delete(event.sessionId);
+        setTurns((prev) => prev.map((t) => (t.id === turnId ? updated : t)));
       }
     }
   }

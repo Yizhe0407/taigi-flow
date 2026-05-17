@@ -68,7 +68,13 @@ if [[ "$NO_WORKER" == "false" ]]; then
   sleep 0.3
   tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main start" Enter
 
-  RAG_PANE=$(tmux split-window -t "${WORKER_PANE}" -v -P -F "#{pane_id}" \
+  INGEST_PANE=$(tmux split-window -t "${WORKER_PANE}" -v -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  sleep 0.3
+  tmux send-keys -t "${INGEST_PANE}" "uv run python -m worker.ingest" Enter
+
+  RAG_PANE=$(tmux split-window -t "${INGEST_PANE}" -v -P -F "#{pane_id}" \
     -e "DATABASE_URL=${DATABASE_URL}" \
     -c "$ROOT/worker")
   sleep 0.3
