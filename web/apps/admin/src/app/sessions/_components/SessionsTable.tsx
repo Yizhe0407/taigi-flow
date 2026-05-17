@@ -84,6 +84,7 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -112,6 +113,25 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   }, [agentFilter, statusFilter, sortBy, sortDir]);
 
   useEffect(() => { void fetchSessions(); }, [fetchSessions]);
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ sortBy, sortDir, limit: "200", cursor: nextCursor });
+      if (agentFilter !== "all") params.set("agentProfileId", agentFilter);
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      const res = await fetch(`/api/sessions?${params}`);
+      if (!res.ok) throw new Error(await errorMessage(res, "載入更多失敗"));
+      const data = await res.json() as { items: SessionRow[]; nextCursor: string | null };
+      setRows((prev) => [...prev, ...data.items]);
+      setNextCursor(data.nextCursor);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "載入更多失敗");
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [nextCursor, loadingMore, sortBy, sortDir, agentFilter, statusFilter]);
 
   function toggleSort(col: SortBy) {
     if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -300,10 +320,19 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
       </div>
 
       {!loading && rows.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          {rows.length} 筆紀錄
-          {nextCursor && "（僅顯示前 200 筆，更多資料未載入）"}
-        </p>
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>{rows.length} 筆紀錄</span>
+          {nextCursor && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loadingMore}
+              onClick={() => void loadMore()}
+            >
+              {loadingMore ? "載入中…" : "載入更多"}
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );

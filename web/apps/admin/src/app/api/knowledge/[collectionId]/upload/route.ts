@@ -31,10 +31,10 @@ export async function POST(req: Request, { params }: Ctx): Promise<Response> {
       return error(`Unsupported file type ${ext}. Allowed: pdf, md, txt, docx`, 400);
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    if (buffer.byteLength > MAX_BYTES) {
+    if (file.size > MAX_BYTES) {
       return error("File exceeds 20 MB limit", 400);
     }
+    const buffer = Buffer.from(await file.arrayBuffer());
 
     const collDir = path.join(UPLOAD_DIR, collectionId);
     await mkdir(collDir, { recursive: true });

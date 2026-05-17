@@ -93,7 +93,16 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
       });
       if (!res.ok) throw new Error(await errorMessage(res, "新增失敗"));
       const entry = await res.json() as PronunciationEntry;
-      setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
+      if (res.status === 201) {
+        setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
+      } else {
+        setEntries((prev) => ({
+          ...prev,
+          [tab]: (prev[tab] ?? []).some((e) => e.id === entry.id)
+            ? (prev[tab] ?? []).map((e) => (e.id === entry.id ? entry : e))
+            : [entry, ...(prev[tab] ?? [])],
+        }));
+      }
       setAdding(false);
       setNewForm({ term: "", replacement: "", priority: "0", note: "" });
       toast.success("已新增字典條目");
@@ -191,7 +200,16 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
         });
         if (res.ok) {
           const entry = await res.json() as PronunciationEntry;
-          setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
+          if (res.status === 201) {
+            setEntries((prev) => ({ ...prev, [tab]: [entry, ...(prev[tab] ?? [])] }));
+          } else {
+            setEntries((prev) => ({
+              ...prev,
+              [tab]: (prev[tab] ?? []).some((e) => e.id === entry.id)
+                ? (prev[tab] ?? []).map((e) => (e.id === entry.id ? entry : e))
+                : [entry, ...(prev[tab] ?? [])],
+            }));
+          }
           imported++;
         } else {
           failed++;

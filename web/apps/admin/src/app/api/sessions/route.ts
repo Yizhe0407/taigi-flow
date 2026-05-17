@@ -25,10 +25,12 @@ export async function GET(req: Request): Promise<Response> {
       where.startedAt = { lt: new Date(Date.now() - STALE_MS) };
     }
 
-    const orderBy =
+    const orderBy = [
       query.sortBy === "turnCount"
         ? { logs: { _count: query.sortDir } }
-        : { startedAt: query.sortDir };
+        : { startedAt: query.sortDir },
+      { id: "asc" as const },
+    ];
 
     const sessions = await prisma.session.findMany({
       where,

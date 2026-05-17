@@ -92,14 +92,18 @@ CREATE TABLE "IngestJob" (
 -- CreateIndex
 CREATE UNIQUE INDEX "AgentProfile_name_key" ON "AgentProfile"("name");
 
+-- CreateIndex (partial unique: at most one active profile)
+CREATE UNIQUE INDEX "AgentProfile_single_active_idx" ON "AgentProfile"("isActive") WHERE "isActive" = TRUE;
+
 -- CreateIndex
 CREATE INDEX "Session_livekitRoom_idx" ON "Session"("livekitRoom");
 
 -- CreateIndex
 CREATE INDEX "InteractionLog_sessionId_turnIndex_idx" ON "InteractionLog"("sessionId", "turnIndex");
 
--- CreateIndex
-CREATE INDEX "PronunciationEntry_profileId_term_idx" ON "PronunciationEntry"("profileId", "term");
+-- CreateIndex (partial unique indexes handle nullable profileId correctly)
+CREATE UNIQUE INDEX "PronunciationEntry_profileId_term_key" ON "PronunciationEntry"("profileId", term) WHERE "profileId" IS NOT NULL;
+CREATE UNIQUE INDEX "PronunciationEntry_global_term_key" ON "PronunciationEntry"(term) WHERE "profileId" IS NULL;
 
 -- CreateIndex
 CREATE INDEX "PronunciationEntry_term_idx" ON "PronunciationEntry"("term");

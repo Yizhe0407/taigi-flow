@@ -165,6 +165,24 @@ export default function MonitorDashboard() {
         pending.current.delete(turnId);
         activeTurnId.current.delete(event.sessionId);
         setTurns((prev) => prev.map((t) => (t.id === turnId ? updated : t)));
+      } else if (event.errorFlag && !turnId) {
+        // ASR failed before any asr event was sent — create synthetic error entry
+        const syntheticId = `${event.sessionId}-err-${event.ts}`;
+        const errorTurn: ConversationTurn = {
+          id: syntheticId,
+          sessionId: event.sessionId,
+          agentName: "",
+          asr: "",
+          sentences: [],
+          latencyFirstAudioMs: null,
+          latencyLlmFirstTokMs: null,
+          latencyAsrMs: null,
+          wasBargedIn: false,
+          errorFlag: event.errorFlag,
+          done: true,
+          ts: event.ts,
+        };
+        setTurns((prev) => [errorTurn, ...prev].slice(0, MAX_TURNS));
       }
     }
   }

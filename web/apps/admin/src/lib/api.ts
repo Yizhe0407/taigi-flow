@@ -25,7 +25,8 @@ export function handleError(err: unknown): NextResponse {
     if (err.message.includes("Unique constraint")) {
       return error("Duplicate entry", 409, err.message);
     }
-    return error(err.message, 500);
+    const msg = process.env.NODE_ENV === "development" ? err.message : "Internal server error";
+    return error(msg, 500);
   }
   return error("Unknown error", 500);
 }

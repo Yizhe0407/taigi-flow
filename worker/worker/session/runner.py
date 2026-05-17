@@ -303,9 +303,7 @@ class PipelineRunner:
             # Inject RAG context into the last message for this turn only
             if rag_context:
                 self._memory.inject_context(rag_context)
-            asyncio.create_task(
-                self._realtime.asr_done(self._session_id, self._agent_name, user_text)
-            )
+            await self._realtime.asr_done(self._session_id, self._agent_name, user_text)
 
             def _on_first_token() -> None:
                 timer.mark("llm_first_tok")
@@ -377,16 +375,14 @@ class PipelineRunner:
                         log_err,
                     )
             latencies = timer.as_dict()
-            asyncio.create_task(
-                self._realtime.turn_done(
-                    session_id=self._session_id,
-                    full_response=full_response,
-                    latency_asr_ms=latencies.get("asr_end"),
-                    latency_llm_first_tok_ms=latencies.get("llm_first_tok"),
-                    latency_first_audio_ms=latencies.get("first_audio"),
-                    was_barged_in=self._was_barged_in,
-                    error_flag=error_flag,
-                )
+            await self._realtime.turn_done(
+                session_id=self._session_id,
+                full_response=full_response,
+                latency_asr_ms=latencies.get("asr_end"),
+                latency_llm_first_tok_ms=latencies.get("llm_first_tok"),
+                latency_first_audio_ms=latencies.get("first_audio"),
+                was_barged_in=self._was_barged_in,
+                error_flag=error_flag,
             )
             # Only reset if no new turn has started (barge-in path sets _turn_gen).
             if self._turn_gen == my_gen:

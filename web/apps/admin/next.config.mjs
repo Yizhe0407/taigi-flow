@@ -9,9 +9,7 @@ loadEnv({ path: path.resolve(repoRoot, ".env") });
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   transpilePackages: ["@taigi-flow/db", "@taigi-flow/types"],
-  experimental: {
-    outputFileTracingRoot: repoRoot,
-  },
+  outputFileTracingRoot: repoRoot,
 };
 
 export default nextConfig;

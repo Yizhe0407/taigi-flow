@@ -635,7 +635,7 @@ export default function KnowledgeCollection({
               <CardHeader>
                 <CardTitle>文件庫</CardTitle>
                 <CardDescription>
-                  已上傳 {totalDocuments} 份文件，總共 {chunks.length} 個 chunks。
+                  已上傳 {totalDocuments} 份文件，總共 {chunks.length}{chunksHasMore ? "+" : ""} 個 chunks。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -917,6 +917,15 @@ export default function KnowledgeCollection({
                 <CardTitle>索引健康度</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {chunksHasMore && (
+                  <Alert variant="destructive">
+                    <TriangleAlert className="size-4" />
+                    <AlertTitle>診斷資料不完整</AlertTitle>
+                    <AlertDescription>
+                      Chunks 超過 500 筆，孤兒偵測與 chunk 計數僅基於前 500 筆，結果可能不準確。
+                    </AlertDescription>
+                  </Alert>
+                )}
                 {activeJobs > 0 && (
                   <Alert>
                     <LoaderCircle className="size-4 animate-spin" />
