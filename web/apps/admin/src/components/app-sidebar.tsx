@@ -25,8 +25,8 @@ import {
 } from "@/components/ui/sidebar";
 
 const NAV = [
-  { href: "/agents",     label: "Agent 人格", icon: Bot },
-  { href: "/knowledge",  label: "知識庫",     icon: BookOpen },
+  { href: "/agents",     label: "Role", icon: Bot },
+  { href: "/knowledge",  label: "RAG",     icon: BookOpen },
   { href: "/dictionary", label: "發音字典",   icon: MessageSquare },
   { href: "/sessions",   label: "對話日誌",   icon: History },
   { href: "/monitor",    label: "即時監控",   icon: Radio },

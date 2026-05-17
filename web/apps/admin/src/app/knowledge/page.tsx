@@ -28,8 +28,8 @@ export default async function KnowledgePage() {
   return (
     <div>
       <PageHeader
-        title="知識庫"
-        description="每個 Agent 人格對應一個知識庫（collection ID = Agent Profile ID）"
+        title="RAG"
+        description="每個 Role 對應一個 RAG 知識庫（collection ID = Role ID）"
       />
       <KnowledgeList items={items} />
     </div>

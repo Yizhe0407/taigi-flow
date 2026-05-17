@@ -19,14 +19,14 @@ export default function KnowledgeList({ items }: { items: Item[] }) {
   async function deleteCollection(e: React.MouseEvent, item: Item) {
     e.stopPropagation();
     const ok = await confirmDialog({
-      title: "清空知識庫",
-      description: `確定要刪除「${item.name}」知識庫的所有內容嗎？此操作無法復原。`,
+      title: "清空 RAG",
+      description: `確定要刪除「${item.name}」的所有 RAG 內容嗎？此操作無法復原。`,
       confirmLabel: "清空",
     });
     if (!ok) return;
     const res = await fetch(`/api/knowledge/${item.id}`, { method: "DELETE" });
     if (res.ok) {
-      toast.success(`已清空「${item.name}」知識庫`);
+      toast.success(`已清空「${item.name}」的 RAG 內容`);
       router.refresh();
     } else {
       toast.error("清空失敗");
@@ -36,7 +36,7 @@ export default function KnowledgeList({ items }: { items: Item[] }) {
   if (items.length === 0) {
     return (
       <p className="text-muted-foreground text-sm py-8 text-center">
-        尚無 Agent 人格。請先在「Agent 人格」頁面建立。
+        尚無 Role。請先在「Role」頁面建立。
       </p>
     );
   }
@@ -68,7 +68,7 @@ export default function KnowledgeList({ items }: { items: Item[] }) {
             <Button
               variant="ghost"
               size="icon-sm"
-              title="清空知識庫"
+              title="清空 RAG"
               className="text-muted-foreground hover:text-destructive"
               onClick={(e) => void deleteCollection(e, item)}
             >

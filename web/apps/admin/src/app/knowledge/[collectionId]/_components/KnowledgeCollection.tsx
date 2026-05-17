@@ -211,7 +211,7 @@ export default function KnowledgeCollection({
   }
 
   async function deleteCollection() {
-    const ok = await confirmDialog({ title: "清空知識庫", description: `確定要刪除「${profileName}」知識庫的所有內容嗎？此操作無法復原。`, confirmLabel: "清空" });
+    const ok = await confirmDialog({ title: "清空 RAG", description: `確定要刪除「${profileName}」的所有 RAG 內容嗎？此操作無法復原。`, confirmLabel: "清空" });
     if (!ok) return;
     await fetch(`/api/knowledge/${collectionId}`, { method: "DELETE" });
     setChunks([]);
@@ -223,11 +223,11 @@ export default function KnowledgeCollection({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">{profileName} — 知識庫</h1>
+          <h1 className="text-2xl font-bold">{profileName} — RAG</h1>
           <p className="text-xs text-muted-foreground mt-0.5">{collectionId}</p>
         </div>
         <Button variant="destructive" size="sm" onClick={deleteCollection}>
-          清空知識庫
+          清空 RAG
         </Button>
       </div>
 

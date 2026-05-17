@@ -122,7 +122,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
     <div className="mx-auto max-w-2xl">
       <PageHeader
         title={isEdit ? "編輯人格" : "新增人格"}
-        description={isEdit ? `ID: ${profile.id}` : "建立一個新的 Agent 人格設定"}
+        description={isEdit ? `ID: ${profile.id}` : "建立一個新的 Role 設定"}
       />
 
       <form onSubmit={submit} className="space-y-5">
@@ -166,8 +166,8 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">RAG 知識庫</CardTitle>
-            <CardDescription>每輪對話自動從知識庫檢索相關內容</CardDescription>
+            <CardTitle className="text-base">RAG</CardTitle>
+            <CardDescription>每輪對話自動從 RAG 知識庫檢索相關內容</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <label className="flex items-center gap-2.5 cursor-pointer">
@@ -187,7 +187,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
             {isEdit && (
               <p className="text-xs text-muted-foreground">
                 <Link href={`/knowledge/${profile.id}`} className="text-primary hover:underline">
-                  前往知識庫上傳文件 →
+                  前往 RAG 上傳文件 →
                 </Link>
               </p>
             )}

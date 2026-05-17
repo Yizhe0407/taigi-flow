@@ -60,8 +60,8 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
   return (
     <div>
       <PageHeader
-        title="Agent 人格"
-        description="同一時間只能啟用一個人格，切換後下次連線自動套用"
+        title="Role"
+        description="同一時間只能啟用一個，切換後下次連線自動套用"
         action={
           <Link href="/agents/new" className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}>
             <Plus className="size-4" />
@@ -72,7 +72,7 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
 
       {profiles.length === 0 && (
         <p className="text-muted-foreground text-sm py-8 text-center">
-          尚無 Agent 人格，請新增一個。
+          尚無 Role，請新增一個。
         </p>
       )}
 
@@ -119,7 +119,7 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
               <Button
                 variant="ghost"
                 size="icon-sm"
-                title="知識庫"
+                title="RAG"
                 onClick={() => router.push(`/knowledge/${p.id}`)}
               >
                 <BookOpen className="size-4" />

@@ -13,13 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,29 +163,19 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter((v ?? "all") as StatusFilter)}>
-          <SelectTrigger className="h-8 w-36">
-            <SelectValue placeholder="狀態" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">所有狀態</SelectItem>
-            <SelectItem value="active">進行中</SelectItem>
-            <SelectItem value="ended">已結束</SelectItem>
-            <SelectItem value="stale">未正常結束</SelectItem>
-          </SelectContent>
-        </Select>
+        <NativeSelect value={statusFilter} onChange={(v) => setStatusFilter(v as StatusFilter)} className="w-36">
+          <option value="all">所有狀態</option>
+          <option value="active">進行中</option>
+          <option value="ended">已結束</option>
+          <option value="stale">未正常結束</option>
+        </NativeSelect>
 
-        <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v ?? "all")}>
-          <SelectTrigger className="h-8 w-44">
-            <SelectValue placeholder="Agent" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">所有 Agent</SelectItem>
-            {agents.map((a) => (
-              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <NativeSelect value={agentFilter} onChange={setAgentFilter} className="w-44">
+          <option value="all">所有 Agent</option>
+          {agents.map((a) => (
+            <option key={a.id} value={a.id}>{a.name}</option>
+          ))}
+        </NativeSelect>
 
         {selected.size > 0 && (
           <Button
@@ -292,5 +276,32 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
         <p className="text-xs text-muted-foreground">{rows.length} 筆紀錄</p>
       )}
     </div>
+  );
+}
+
+function NativeSelect({
+  value,
+  onChange,
+  className,
+  children,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "cursor-pointer text-foreground",
+        className,
+      )}
+    >
+      {children}
+    </select>
   );
 }
