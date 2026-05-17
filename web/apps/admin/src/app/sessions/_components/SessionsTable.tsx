@@ -171,7 +171,7 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
         </NativeSelect>
 
         <NativeSelect value={agentFilter} onChange={setAgentFilter} className="w-44">
-          <option value="all">所有 Agent</option>
+          <option value="all">所有 Role</option>
           {agents.map((a) => (
             <option key={a.id} value={a.id}>{a.name}</option>
           ))}
@@ -295,8 +295,8 @@ function NativeSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       className={cn(
-        "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "h-8 rounded-lg border border-input bg-background px-2.5 text-sm",
+        "focus-visible:outline-none focus:ring-2 focus:ring-ring",
         "cursor-pointer text-foreground",
         className,
       )}
