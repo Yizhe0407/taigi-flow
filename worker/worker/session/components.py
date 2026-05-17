@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import logging
 import os
@@ -15,6 +16,7 @@ from ..pipeline.asr.breeze import BreezeASR26
 from ..pipeline.asr.qwen3 import Qwen3ASR
 from ..pipeline.llm import LLMClient
 from ..pipeline.memory import SlidingWindowMemory
+from ..pipeline.rag import RagRetriever
 from ..pipeline.realtime import RealtimePublisher
 from ..pipeline.text_processor import TextProcessor
 from ..pipeline.tts import PiperTTS
@@ -22,9 +24,24 @@ from ..pipeline.tts import PiperTTS
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+    from ..ingest.embedder import Embedder
     from ..pipeline.asr.base import BaseASR
 
 logger = logging.getLogger("worker.session.components")
+
+_embedder_singleton: Embedder | None = None
+
+
+async def _get_embedder_async() -> Embedder:
+    global _embedder_singleton
+    if _embedder_singleton is None:
+        from ..ingest.embedder import Embedder
+
+        emb = Embedder()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, emb.load)
+        _embedder_singleton = emb
+    return _embedder_singleton
 
 _FALLBACK_SYSTEM_PROMPT = (
     "你是一個會講台語的 AI 助理。"
@@ -48,6 +65,7 @@ class AgentComponents:
     voice_controller: VoiceController
     realtime: RealtimePublisher
     agent_name: str
+    rag_retriever: RagRetriever | None = None
 
 
 def _build_tts() -> PiperTTS | None:
@@ -96,18 +114,23 @@ def _build_llm() -> LLMClient:
     )
 
 
-async def _load_profile(db: AsyncSession) -> tuple[str, str | None, str]:
+async def _load_profile(
+    db: AsyncSession,
+) -> tuple[str, str | None, str, dict[str, object] | None]:
     """Load the currently active profile from DB.
 
-    Returns (system_prompt, profile_id, profile_name).
+    Returns (system_prompt, profile_id, profile_name, rag_config).
     """
     repo = AgentProfileRepository(db)
     profile = await repo.get_active()
     if profile is None:
         logger.warning("No active profile in DB, using fallback prompt.")
-        return _FALLBACK_SYSTEM_PROMPT, None, "fallback"
+        return _FALLBACK_SYSTEM_PROMPT, None, "fallback", None
     logger.info("Loaded active profile '%s' (id=%s)", profile.name, profile.id)
-    return profile.systemPrompt, profile.id, profile.name
+    rag: dict[str, object] | None = (
+        dict(profile.ragConfig) if profile.ragConfig else None  # type: ignore[arg-type]
+    )
+    return profile.systemPrompt, profile.id, profile.name, rag
 
 
 async def build_components(livekit_room: str) -> AgentComponents:
@@ -130,11 +153,35 @@ async def build_components(livekit_room: str) -> AgentComponents:
 
     llm = _build_llm()
 
+    rag_retriever: RagRetriever | None = None
+    rag_config: dict[str, object] | None
     async with async_session_factory() as db:
-        system_prompt, profile_id, profile_name = await _load_profile(db)
+        system_prompt, profile_id, profile_name, rag_config = await _load_profile(db)
         memory = SlidingWindowMemory(system_prompt=system_prompt)
         text_processor = TextProcessor(profile_id=profile_id, db_session=None)
         await text_processor.reload_if_updated(db)
+
+    if rag_config and rag_config.get("enabled") and rag_config.get("collectionId"):
+        try:
+            embedder = await _get_embedder_async()
+            coll_id = str(rag_config["collectionId"])
+            top_k = int(rag_config.get("topK") or 3)  # type: ignore[arg-type]
+            threshold = float(rag_config.get("threshold") or 0.7)  # type: ignore[arg-type]
+            rag_retriever = RagRetriever(
+                embedder=embedder,
+                session_factory=async_session_factory,
+                collection_id=coll_id,
+                top_k=top_k,
+                threshold=threshold,
+            )
+            logger.info(
+                "RAG enabled collection=%s topK=%d threshold=%.2f",
+                coll_id,
+                top_k,
+                threshold,
+            )
+        except Exception as e:
+            logger.error("RAG init failed, continuing without RAG: %s", e)
 
     fallback = FallbackPlayer(audio_source)
     if tts is not None:
@@ -167,4 +214,5 @@ async def build_components(livekit_room: str) -> AgentComponents:
         voice_controller=VoiceController(),
         realtime=RealtimePublisher(),
         agent_name=profile_name,
+        rag_retriever=rag_retriever,
     )

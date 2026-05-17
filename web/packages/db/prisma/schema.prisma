@@ -82,9 +82,25 @@ model KnowledgeChunk {
   collectionId String
   content      String                       @db.Text
   metadata     Json
-  embedding    Unsupported("vector(1536)")?
+  embedding    Unsupported("vector(1024)")?
 
   createdAt DateTime @default(now())
 
+  @@index([collectionId])
+}
+
+// ============ Ingest 佇列 ============
+model IngestJob {
+  id           String   @id @default(uuid())
+  collectionId String
+  fileName     String
+  filePath     String
+  status       String   @default("pending")
+  error        String?
+  chunkCount   Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status, createdAt])
   @@index([collectionId])
 }

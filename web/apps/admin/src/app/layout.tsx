@@ -12,6 +12,7 @@ export const metadata: Metadata = {
 
 const NAV = [
   { href: "/agents", label: "Agent 人格" },
+  { href: "/knowledge", label: "知識庫" },
   { href: "/dictionary", label: "發音字典" },
   { href: "/sessions", label: "對話日誌" },
   { href: "/monitor", label: "監控" },

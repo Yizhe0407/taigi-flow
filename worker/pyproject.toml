@@ -18,6 +18,10 @@ dependencies = [
     "piper-tts>=1.4.2",
     "livekit-plugins-silero>=1.5.4",
     "redis>=7.4.0",
+    "sentence-transformers>=3.0.0",
+    "pypdf>=4.0.0",
+    "python-docx>=1.1.0",
+    "pgvector>=0.3.0",
 ]
 
 [project.optional-dependencies]

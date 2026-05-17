@@ -16,8 +16,10 @@
 | 2 | [phase-2-voice-layer.md](phase-2-voice-layer.md) | W3 | ✅ 完成 |
 | 3 | [phase-3-integration.md](phase-3-integration.md) | W4 | 🏗️ 進行中（P3-01~P3-05 完成，P3-06 待執行）|
 | 4 | [phase-4-barge-in.md](phase-4-barge-in.md) | W5 | ⬜ 未開始 |
-| 5 | [phase-5-admin-panel.md](phase-5-admin-panel.md) | W6 | ⬜ 未開始 |
-| 6 | [phase-6-rag-tools.md](phase-6-rag-tools.md) | W7 | ⬜ 未開始 |
+| 5 | [phase-5-admin-panel.md](phase-5-admin-panel.md) | W6 | ✅ 完成 |
+| 6 | [phase-6-rag-tools.md](phase-6-rag-tools.md) | W7 | ✅ 完成 |
+| 6.4 | [phase-6.4-bus-data.md](phase-6.4-bus-data.md) | W7.4 | ⬜ 未開始 |
+| 6.5 | [phase-6.5-map.md](phase-6.5-map.md) | W7.5 | ⬜ 未開始 |
 | 7 | [phase-7-polish.md](phase-7-polish.md) | W8 | ⬜ 未開始 |
 
 開始一個 Phase 時把 ⬜ 改成 🏗️（進行中），完成後改成 ✅。

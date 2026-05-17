@@ -32,9 +32,9 @@ echo "building tmux session '${SESSION}' (dev mode)..."
 
 # Layout:
 #  ┌─────────────┬─────────────────────────────────┐
-#  │ Playground  │                                  │
-#  │   :3000     │         Worker                   │
-#  ├─────────────┤        (right half)              │
+#  │ Playground  │        Worker (voice)            │
+#  │   :3000     ├─────────────────────────────────┤
+#  ├─────────────┤        Ingest Worker             │
 #  │   Admin     │                                  │
 #  │   :3001     │                                  │
 #  └─────────────┴─────────────────────────────────┘
@@ -55,6 +55,13 @@ if [[ "$NO_WORKER" == "false" ]]; then
   tmux resize-pane -t "${WORKER_PANE}" -x "55%"
   sleep 0.3
   tmux send-keys -t "${WORKER_PANE}" "uv run python -m worker.main dev" Enter
+
+  # Step 2b: Split right column vertically → Worker (top) + Ingest (bottom)
+  INGEST_PANE=$(tmux split-window -t "${WORKER_PANE}" -v -P -F "#{pane_id}" \
+    -e "DATABASE_URL=${DATABASE_URL}" \
+    -c "$ROOT/worker")
+  sleep 0.3
+  tmux send-keys -t "${INGEST_PANE}" "uv run python -m worker.ingest" Enter
 fi
 
 # Step 3: Split left column vertically → Playground (top) + Admin (bottom)

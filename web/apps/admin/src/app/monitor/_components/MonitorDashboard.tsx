@@ -53,6 +53,34 @@ export default function MonitorDashboard() {
       setStats(JSON.parse(e.data) as Stats);
     });
 
+    es.addEventListener("history", (e) => {
+      type HistoryEntry = {
+        id: string; sessionId: string; agentName: string;
+        asr: string; llmRaw: string; hanlo: string | null; taibun: string;
+        latencyFirstAudioMs: number | null; latencyLlmFirstTokMs: number | null;
+        latencyAsrMs: number | null; wasBargedIn: boolean;
+        errorFlag: string | null; ts: number;
+      };
+      const history = JSON.parse(e.data) as HistoryEntry[];
+      const historicTurns: ConversationTurn[] = history.map((h) => ({
+        id: h.id,
+        sessionId: h.sessionId,
+        agentName: h.agentName,
+        asr: h.asr,
+        sentences: h.llmRaw
+          ? [{ sentence: h.llmRaw, hanlo: h.hanlo ?? "", taibun: h.taibun }]
+          : [],
+        latencyFirstAudioMs: h.latencyFirstAudioMs,
+        latencyLlmFirstTokMs: h.latencyLlmFirstTokMs,
+        latencyAsrMs: h.latencyAsrMs,
+        wasBargedIn: h.wasBargedIn,
+        errorFlag: h.errorFlag,
+        done: true,
+        ts: h.ts,
+      }));
+      setTurns(historicTurns);
+    });
+
     es.addEventListener("live", (e) => {
       const event = JSON.parse(e.data) as LiveEvent;
       handleLiveEvent(event);

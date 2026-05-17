@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from ..audio.fallback import FallbackPlayer
     from ..audio.voice_controller import VoiceController
     from ..db.repositories import InteractionLogRepository
+    from ..pipeline.rag import RagRetriever
     from ..pipeline.tts import PiperTTS
     from .components import AgentComponents
 
@@ -71,6 +72,7 @@ class PipelineRunner:
         self._vc: VoiceController = components.voice_controller
         self._realtime: RealtimePublisher = components.realtime
         self._agent_name: str = components.agent_name
+        self._rag: RagRetriever | None = components.rag_retriever
         self._pipeline_busy = False
         self._utterance_seq = 0
         self._turn_index = 0
@@ -278,7 +280,29 @@ class PipelineRunner:
 
             logger.info("[%s][asr] user_text=%s", trace_id, user_text)
             self._vc.transition(VoiceState.THINKING)
+
+            # ── Stage 1.5: RAG retrieval ──────────────────────────────────────
+            rag_context = ""
+            if self._rag is not None:
+                try:
+                    rag_chunks, rag_metrics = await self._rag.retrieve(user_text)
+                    rag_context = self._rag.build_context_block(rag_chunks)
+                    logger.info(
+                        "[%s][rag] hits=%d top_sim=%.3f latency_ms=%.1f",
+                        trace_id,
+                        int(rag_metrics["rag_hit_count"]),
+                        rag_metrics["rag_top_sim"],
+                        rag_metrics["latency_rag_ms"],
+                    )
+                except Exception as rag_err:
+                    logger.warning("[%s][rag] retrieval failed: %s", trace_id, rag_err)
+
+            # Store only the original user text in memory — RAG context is ephemeral
+            # and must not accumulate in the sliding window across turns.
             self._memory.add("user", user_text)
+            # Inject RAG context into the last message for this turn only
+            if rag_context:
+                self._memory.inject_context(rag_context)
             asyncio.create_task(
                 self._realtime.asr_done(self._session_id, self._agent_name, user_text)
             )

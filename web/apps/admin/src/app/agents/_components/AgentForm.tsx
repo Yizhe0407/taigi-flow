@@ -19,10 +19,14 @@ type FormState = {
   pitch: string;
   tools: string;
   isActive: boolean;
+  ragEnabled: boolean;
+  ragTopK: string;
+  ragThreshold: string;
 };
 
 function profileToForm(p: AgentProfile): FormState {
   const vc = p.voiceConfig as { piperModel: string; speed: number; pitch: number };
+  const rc = p.ragConfig as { enabled?: boolean; topK?: number; threshold?: number } | null;
   return {
     name: p.name,
     description: p.description ?? "",
@@ -32,6 +36,9 @@ function profileToForm(p: AgentProfile): FormState {
     pitch: String(vc.pitch ?? 0),
     tools: ((p.tools as string[]) ?? []).join(", "),
     isActive: p.isActive,
+    ragEnabled: rc?.enabled ?? false,
+    ragTopK: String(rc?.topK ?? 3),
+    ragThreshold: String(rc?.threshold ?? 0.7),
   };
 }
 
@@ -44,6 +51,9 @@ const DEFAULT: FormState = {
   pitch: "0",
   tools: "",
   isActive: true,
+  ragEnabled: false,
+  ragTopK: "3",
+  ragThreshold: "0.7",
 };
 
 export default function AgentForm({ profile }: { profile?: AgentProfile }) {
@@ -72,6 +82,14 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
           speed: parseFloat(form.speed) || 1,
           pitch: parseFloat(form.pitch) || 0,
         },
+        ragConfig: form.ragEnabled
+          ? {
+              enabled: true,
+              collectionId: profile?.id ?? "",
+              topK: parseInt(form.ragTopK) || 3,
+              threshold: parseFloat(form.ragThreshold) || 0.7,
+            }
+          : null,
         tools: form.tools.split(",").map((s) => s.trim()).filter(Boolean),
         isActive: form.isActive,
       };
@@ -170,6 +188,51 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
               />
             </Field>
           </div>
+        </fieldset>
+
+        <fieldset className="border border-border rounded-lg p-4 space-y-3">
+          <legend className="text-sm font-medium px-1">RAG 知識庫</legend>
+          <label className="flex items-center gap-2 text-sm cursor-pointer">
+            <Checkbox
+              checked={form.ragEnabled}
+              onCheckedChange={(v) => set("ragEnabled", v)}
+            />
+            啟用 RAG 檢索
+          </label>
+          {form.ragEnabled && (
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Top-K" htmlFor="ragTopK">
+                <Input
+                  id="ragTopK"
+                  type="number"
+                  min="1"
+                  max="10"
+                  step="1"
+                  value={form.ragTopK}
+                  onChange={(e) => set("ragTopK", e.target.value)}
+                />
+              </Field>
+              <Field label="相似度門檻" htmlFor="ragThreshold">
+                <Input
+                  id="ragThreshold"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={form.ragThreshold}
+                  onChange={(e) => set("ragThreshold", e.target.value)}
+                />
+              </Field>
+            </div>
+          )}
+          {isEdit && (
+            <p className="text-xs text-gray-400">
+              知識庫管理：
+              <a href={`/knowledge/${profile.id}`} className="text-blue-500 hover:underline ml-1">
+                前往上傳文件
+              </a>
+            </p>
+          )}
         </fieldset>
 
         <Field label="工具（逗號分隔）" htmlFor="tools">

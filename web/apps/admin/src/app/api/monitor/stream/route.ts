@@ -15,6 +15,44 @@ function sseChunk(event: string, data: unknown): Uint8Array {
   );
 }
 
+async function fetchRecentTurns() {
+  const logs = await prisma.interactionLog.findMany({
+    where: { createdAt: { gte: new Date(Date.now() - 60 * 60_000) } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      sessionId: true,
+      userAsrText: true,
+      llmRawText: true,
+      hanloText: true,
+      taibunText: true,
+      latencyFirstAudio: true,
+      latencyLlmFirstTok: true,
+      latencyAsrEnd: true,
+      wasBargedIn: true,
+      errorFlag: true,
+      createdAt: true,
+      session: { select: { agentProfile: { select: { name: true } } } },
+    },
+  });
+  return logs.map((l) => ({
+    id: l.id,
+    sessionId: l.sessionId,
+    agentName: l.session.agentProfile.name,
+    asr: l.userAsrText,
+    llmRaw: l.llmRawText,
+    hanlo: l.hanloText,
+    taibun: l.taibunText,
+    latencyFirstAudioMs: l.latencyFirstAudio,
+    latencyLlmFirstTokMs: l.latencyLlmFirstTok,
+    latencyAsrMs: l.latencyAsrEnd,
+    wasBargedIn: l.wasBargedIn,
+    errorFlag: l.errorFlag,
+    ts: l.createdAt.getTime() / 1000,
+  }));
+}
+
 async function fetchStats() {
   const [activeSessions, recent] = await Promise.all([
     prisma.session.count({
@@ -65,9 +103,11 @@ export async function GET(): Promise<Response> {
         }
       };
 
-      // Send initial stats snapshot
+      // Send initial stats + recent history snapshot
       try {
-        send("stats", await fetchStats());
+        const [stats, history] = await Promise.all([fetchStats(), fetchRecentTurns()]);
+        send("stats", stats);
+        send("history", history);
       } catch { /* non-fatal */ }
 
       // Heartbeat to keep connection alive and refresh stats

@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Any
 
+from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -105,6 +106,47 @@ class PronunciationEntry(Base):
     replacement: Mapped[str] = mapped_column(String, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     note: Mapped[str | None] = mapped_column(String, nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        default=now_utc,
+        nullable=False,
+    )
+    updatedAt: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        default=now_utc,
+        onupdate=now_utc,
+        nullable=False,
+    )
+
+
+class KnowledgeChunk(Base):
+    __tablename__ = "KnowledgeChunk"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    collectionId: Mapped[str] = mapped_column(String, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # Mapped to "metadata" column; renamed to avoid clash with DeclarativeBase.metadata
+    doc_metadata: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSONB, nullable=False
+    )
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1024), nullable=True)
+    createdAt: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        default=now_utc,
+        nullable=False,
+    )
+
+
+class IngestJob(Base):
+    __tablename__ = "IngestJob"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    collectionId: Mapped[str] = mapped_column(String, nullable=False)
+    fileName: Mapped[str] = mapped_column(String, nullable=False)
+    filePath: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    chunkCount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     createdAt: Mapped[datetime] = mapped_column(
         DateTime(timezone=False),
         default=now_utc,

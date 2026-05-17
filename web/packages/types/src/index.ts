@@ -9,8 +9,10 @@ export type VoiceConfig = z.infer<typeof voiceConfigSchema>;
 
 export const ragConfigSchema = z
   .object({
+    enabled: z.boolean().default(false),
     collectionId: z.string().min(1),
-    topK: z.number().int().positive().default(4),
+    topK: z.number().int().positive().default(3),
+    threshold: z.number().min(0).max(1).default(0.7),
   })
   .nullable();
 export type RagConfig = z.infer<typeof ragConfigSchema>;
