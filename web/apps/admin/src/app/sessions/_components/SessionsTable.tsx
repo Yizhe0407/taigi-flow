@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowUpDown, ArrowUp, ArrowDown, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ArrowUpDown, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { confirmDialog } from "@/components/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -11,10 +13,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 
 type AgentOption = { id: string; name: string };
 
@@ -45,26 +54,44 @@ function StatusBadge({ status }: { status: "active" | "ended" | "stale" }) {
   if (status === "ended")
     return <Badge variant="outline" className="text-gray-400 border-gray-200">已結束</Badge>;
   return (
-    <Badge variant="outline" className="text-amber-500 border-amber-300" title="Worker 未正常結束（SIGKILL / 崩潰）">
+    <Badge variant="outline" className="text-amber-500 border-amber-300" title="Worker 未正常結束">
       未正常結束
     </Badge>
   );
 }
 
-function SortIcon({ col, sortBy, sortDir }: { col: SortBy; sortBy: SortBy; sortDir: SortDir }) {
-  if (col !== sortBy) return <ArrowUpDown size={14} className="text-gray-400" />;
-  return sortDir === "asc"
-    ? <ArrowUp size={14} className="text-indigo-600" />
-    : <ArrowDown size={14} className="text-indigo-600" />;
+function SortHeader({
+  label, col, sortBy, sortDir, onSort,
+}: {
+  label: string;
+  col: SortBy;
+  sortBy: SortBy;
+  sortDir: SortDir;
+  onSort: (col: SortBy) => void;
+}) {
+  const Icon =
+    col !== sortBy ? ArrowUpDown :
+    sortDir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="-ml-3 h-8 gap-1 font-medium"
+      onClick={() => onSort(col)}
+    >
+      {label}
+      <Icon className="size-3.5 text-muted-foreground" />
+    </Button>
+  );
 }
 
 export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
+  const router = useRouter();
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
-
-  const [agentFilter, setAgentFilter] = useState<string>("all");
+  const [agentFilter, setAgentFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("startedAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -86,12 +113,8 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   useEffect(() => { void fetchSessions(); }, [fetchSessions]);
 
   function toggleSort(col: SortBy) {
-    if (sortBy === col) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortBy(col);
-      setSortDir("desc");
-    }
+    if (sortBy === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortBy(col); setSortDir("desc"); }
   }
 
   function toggleAll(checked: boolean) {
@@ -101,24 +124,39 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   function toggleRow(id: string, checked: boolean) {
     setSelected((prev) => {
       const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
+      checked ? next.add(id) : next.delete(id);
       return next;
     });
   }
 
+  async function deleteRow(id: string) {
+    const ok = await confirmDialog({ description: "確定要刪除此對話紀錄？此操作無法復原。", confirmLabel: "刪除" });
+    if (!ok) return;
+    await fetch("/api/sessions", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: [id] }),
+    });
+    setRows((prev) => prev.filter((r) => r.id !== id));
+    setSelected((prev) => { const s = new Set(prev); s.delete(id); return s; });
+    toast.success("已刪除");
+  }
+
   async function deleteSelected() {
-    if (selected.size === 0) return;
-    if (!confirm(`刪除 ${selected.size} 筆對話紀錄？此操作無法復原。`)) return;
+    const ok = await confirmDialog({
+      description: `確定要刪除 ${selected.size} 筆對話紀錄？此操作無法復原。`,
+      confirmLabel: "刪除",
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
-      const res = await fetch("/api/sessions", {
+      await fetch("/api/sessions", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: Array.from(selected) }),
       });
-      if (!res.ok) throw new Error(await res.text());
       await fetchSessions();
+      toast.success(`已刪除 ${selected.size} 筆`);
     } finally {
       setDeleting(false);
     }
@@ -128,30 +166,32 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
   const someSelected = selected.size > 0 && !allSelected;
 
   return (
-    <div>
+    <div className="space-y-4">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <NativeSelect
-          value={statusFilter}
-          onChange={(v) => setStatusFilter(v as StatusFilter)}
-          className="w-36"
-        >
-          <option value="all">所有狀態</option>
-          <option value="active">進行中</option>
-          <option value="ended">已結束</option>
-          <option value="stale">未正常結束</option>
-        </NativeSelect>
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter((v ?? "all") as StatusFilter)}>
+          <SelectTrigger className="h-8 w-36">
+            <SelectValue placeholder="狀態" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">所有狀態</SelectItem>
+            <SelectItem value="active">進行中</SelectItem>
+            <SelectItem value="ended">已結束</SelectItem>
+            <SelectItem value="stale">未正常結束</SelectItem>
+          </SelectContent>
+        </Select>
 
-        <NativeSelect
-          value={agentFilter}
-          onChange={setAgentFilter}
-          className="w-44"
-        >
-          <option value="all">所有 Agent</option>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>{a.name}</option>
-          ))}
-        </NativeSelect>
+        <Select value={agentFilter} onValueChange={(v) => setAgentFilter(v ?? "all")}>
+          <SelectTrigger className="h-8 w-44">
+            <SelectValue placeholder="Agent" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">所有 Agent</SelectItem>
+            {agents.map((a) => (
+              <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {selected.size > 0 && (
           <Button
@@ -161,113 +201,96 @@ export default function SessionsTable({ agents }: { agents: AgentOption[] }) {
             onClick={() => void deleteSelected()}
             className="ml-auto gap-1.5"
           >
-            <Trash2 size={14} />
+            <Trash2 className="size-3.5" />
             刪除 {selected.size} 筆
           </Button>
         )}
       </div>
 
-      {loading ? (
-        <p className="text-sm text-gray-400 py-8 text-center">載入中…</p>
-      ) : rows.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">無符合條件的紀錄。</p>
-      ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
+      {/* Table */}
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={allSelected}
+                  indeterminate={someSelected}
+                  onCheckedChange={(v) => toggleAll(!!v)}
+                />
+              </TableHead>
+              <TableHead>
+                <SortHeader label="時間" col="startedAt" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+              </TableHead>
+              <TableHead>Agent</TableHead>
+              <TableHead>房間</TableHead>
+              <TableHead>
+                <SortHeader label="輪次" col="turnCount" sortBy={sortBy} sortDir={sortDir} onSort={toggleSort} />
+              </TableHead>
+              <TableHead>狀態</TableHead>
+              <TableHead className="w-12" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: 7 }).map((__, j) => (
+                    <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                  ))}
+                </TableRow>
+              ))
+            ) : rows.length === 0 ? (
               <TableRow>
-                <TableHead className="w-10">
-                  <Checkbox
-                    checked={allSelected}
-                    indeterminate={someSelected}
-                    onCheckedChange={(v) => toggleAll(v)}
-                  />
-                </TableHead>
-                <TableHead>
-                  <button
-                    className="flex items-center gap-1 font-medium hover:text-indigo-600"
-                    onClick={() => toggleSort("startedAt")}
-                  >
-                    時間 <SortIcon col="startedAt" sortBy={sortBy} sortDir={sortDir} />
-                  </button>
-                </TableHead>
-                <TableHead>Agent</TableHead>
-                <TableHead>房間</TableHead>
-                <TableHead>
-                  <button
-                    className="flex items-center gap-1 font-medium hover:text-indigo-600"
-                    onClick={() => toggleSort("turnCount")}
-                  >
-                    輪次 <SortIcon col="turnCount" sortBy={sortBy} sortDir={sortDir} />
-                  </button>
-                </TableHead>
-                <TableHead>狀態</TableHead>
+                <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                  無符合條件的紀錄
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((row) => {
-                const status = sessionStatus(row);
-                return (
-                  <TableRow key={row.id} data-state={selected.has(row.id) ? "selected" : undefined}>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selected.has(row.id)}
-                        onCheckedChange={(v) => toggleRow(row.id, v)}
-                      />
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-gray-600 text-xs">
-                      {new Date(row.startedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
-                    </TableCell>
-                    <TableCell>{row.agentProfile.name}</TableCell>
-                    <TableCell className="font-mono text-xs text-gray-500 max-w-[160px] truncate">
-                      {row.livekitRoom}
-                    </TableCell>
-                    <TableCell>{row._count.logs}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <StatusBadge status={status} />
-                        <Link
-                          href={`/sessions/${row.id}`}
-                          className="text-xs text-indigo-600 hover:underline"
-                        >
-                          查看
-                        </Link>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
+            ) : rows.map((row) => {
+              const status = sessionStatus(row);
+              return (
+                <TableRow
+                  key={row.id}
+                  data-state={selected.has(row.id) ? "selected" : undefined}
+                  className="cursor-pointer"
+                  onClick={() => router.push(`/sessions/${row.id}`)}
+                >
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selected.has(row.id)}
+                      onCheckedChange={(v) => toggleRow(row.id, !!v)}
+                    />
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground" suppressHydrationWarning>
+                    {new Date(row.startedAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+                  </TableCell>
+                  <TableCell className="font-medium">{row.agentProfile.name}</TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground max-w-[160px] truncate">
+                    {row.livekitRoom}
+                  </TableCell>
+                  <TableCell>{row._count.logs}</TableCell>
+                  <TableCell><StatusBadge status={status} /></TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      title="刪除"
+                      className="text-muted-foreground hover:text-destructive"
+                      onClick={() => void deleteRow(row.id)}
+                    >
+                      <Trash2 className="size-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
+
+      {!loading && rows.length > 0 && (
+        <p className="text-xs text-muted-foreground">{rows.length} 筆紀錄</p>
       )}
     </div>
-  );
-}
-
-function NativeSelect({
-  value,
-  onChange,
-  className,
-  children,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        "h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none",
-        "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
-        "cursor-pointer",
-        className,
-      )}
-    >
-      {children}
-    </select>
   );
 }

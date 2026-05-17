@@ -2,10 +2,19 @@
 
 import { useState, useRef } from "react";
 import type { PronunciationEntry } from "@taigi-flow/db";
-import { Trash2, Pencil, Plus, Download, Upload, Check, X } from "lucide-react";
+import { Check, Download, MoreHorizontal, Pencil, Plus, Trash2, Upload, X } from "lucide-react";
+import { toast } from "sonner";
+import { confirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -15,6 +24,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PageHeader } from "@/components/page-header";
 
 type Agent = { id: string; name: string };
 
@@ -106,7 +116,8 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
   }
 
   async function deleteEntry(id: string) {
-    if (!confirm("刪除此條目？")) return;
+    const ok = await confirmDialog({ description: "確定要刪除此條目？", confirmLabel: "刪除" });
+    if (!ok) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/dictionary/${id}`, { method: "DELETE" });
@@ -163,27 +174,30 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
       }
     }
     setBusy(false);
-    alert(`匯入完成：${imported} 筆`);
+    toast.success(`匯入完成：${imported} 筆`);
     if (fileRef.current) fileRef.current.value = "";
   }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">發音字典</h1>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={exportCsv}>
-            <Download size={14} /> 匯出 CSV
-          </Button>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
-            <Upload size={14} /> 批次匯入
-          </Button>
-          <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importCsv} />
-          <Button size="sm" onClick={() => setAdding(true)}>
-            <Plus size={14} /> 新增
-          </Button>
-        </div>
-      </div>
+      <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={importCsv} />
+      <PageHeader
+        title="發音字典"
+        description="設定台語詞彙的自訂發音替換規則"
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={exportCsv}>
+              <Download className="size-3.5" /> 匯出 CSV
+            </Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => fileRef.current?.click()}>
+              <Upload className="size-3.5" /> 批次匯入
+            </Button>
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <Plus className="size-3.5" /> 新增
+            </Button>
+          </div>
+        }
+      />
 
       <Tabs value={tab} onValueChange={(v) => void handleTabChange(v ?? "global")} className="mb-4">
         <TabsList variant="line">
@@ -306,27 +320,32 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs">{e.note ?? ""}</TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            onClick={() => {
-                              setEditId(e.id);
-                              setEditForm({ term: e.term, replacement: e.replacement, priority: e.priority, note: e.note ?? "" });
-                            }}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={<Button variant="ghost" size="icon-sm" />}
                           >
-                            <Pencil size={14} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            disabled={busy}
-                            onClick={() => void deleteEntry(e.id)}
-                            className="text-muted-foreground hover:text-destructive"
-                          >
-                            <Trash2 size={14} />
-                          </Button>
-                        </div>
+                            <MoreHorizontal className="size-4" />
+                            <span className="sr-only">操作</span>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setEditId(e.id);
+                                setEditForm({ term: e.term, replacement: e.replacement, priority: e.priority, note: e.note ?? "" });
+                              }}
+                            >
+                              <Pencil className="size-3.5 mr-2" /> 編輯
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              disabled={busy}
+                              onClick={() => void deleteEntry(e.id)}
+                            >
+                              <Trash2 className="size-3.5 mr-2" /> 刪除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ),

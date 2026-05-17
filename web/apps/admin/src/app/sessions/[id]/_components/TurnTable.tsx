@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { InteractionLog } from "@taigi-flow/db";
 import { BookPlus, Check, X } from "lucide-react";
+import { toast } from "sonner";
 
 export type TurnView = Pick<
   InteractionLog,
@@ -66,9 +67,9 @@ export default function TurnTable({ turns }: { turns: TurnView[] }) {
       });
       if (!res.ok) throw new Error(await res.text());
       setAddDict(null);
-      alert("已加入字典");
+      toast.success("已加入字典");
     } catch (err) {
-      alert(err instanceof Error ? err.message : "失敗");
+      toast.error(err instanceof Error ? err.message : "加入失敗");
     } finally {
       setAddBusy(false);
     }

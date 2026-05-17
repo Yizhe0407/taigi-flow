@@ -157,13 +157,10 @@ export default function MonitorDashboard() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">即時監控</h1>
-        <div className="flex items-center gap-2 text-sm">
-          <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
-          <span className="text-gray-400">{connected ? "串流連線中" : "未連線"}</span>
-        </div>
+      {/* Connection status */}
+      <div className="flex items-center gap-2 text-sm mb-6">
+        <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 animate-pulse" : "bg-red-400"}`} />
+        <span className="text-muted-foreground">{connected ? "串流連線中" : "未連線"}</span>
       </div>
 
       {/* Stats */}
@@ -186,12 +183,12 @@ export default function MonitorDashboard() {
 
 
       {/* Live feed */}
-      <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
+      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
         對話串流
       </h2>
 
       {turns.length === 0 && (
-        <p className="text-gray-500 text-sm py-10 text-center">等待對話…</p>
+        <p className="text-muted-foreground text-sm py-10 text-center">等待對話…</p>
       )}
 
       <div className="space-y-3">
@@ -217,14 +214,14 @@ function TurnCard({ turn }: { turn: ConversationTurn }) {
 
   return (
     <div className={`rounded-lg border ${
-      turn.errorFlag ? "border-red-200 bg-red-50" :
-      turn.wasBargedIn ? "border-amber-200 bg-amber-50" :
-      "border-gray-100 bg-white"
+      turn.errorFlag ? "border-destructive/30 bg-destructive/5" :
+      turn.wasBargedIn ? "border-amber-500/30 bg-amber-500/5" :
+      "border-border bg-card"
     }`}>
       {/* Top bar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-inherit">
-        <span className="text-xs text-gray-400 tabular-nums">{ts}</span>
-        <span className="text-xs font-medium text-gray-600">{turn.agentName}</span>
+        <span className="text-xs text-muted-foreground tabular-nums">{ts}</span>
+        <span className="text-xs font-medium text-foreground">{turn.agentName}</span>
         {!turn.done && (
           <span className="flex items-center gap-1 text-xs text-indigo-500">
             <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
@@ -252,25 +249,25 @@ function TurnCard({ turn }: { turn: ConversationTurn }) {
       <div className="px-4 py-3 space-y-2 text-sm">
         {/* User ASR */}
         <div className="flex gap-2">
-          <span className="text-xs font-medium text-gray-400 w-12 shrink-0 pt-0.5">使用者</span>
-          <span className="text-gray-800 break-words">{turn.asr || <span className="text-gray-300 italic">辨識中…</span>}</span>
+          <span className="text-xs font-medium text-muted-foreground w-12 shrink-0 pt-0.5">使用者</span>
+          <span className="text-foreground break-words">{turn.asr || <span className="text-muted-foreground/50 italic">辨識中…</span>}</span>
         </div>
 
         {/* Agent sentences — stream in one by one */}
         {turn.sentences.length > 0 && (
           <div className="flex gap-2">
-            <span className="text-xs font-medium text-gray-400 w-12 shrink-0 pt-0.5">Agent</span>
+            <span className="text-xs font-medium text-muted-foreground w-12 shrink-0 pt-0.5">Agent</span>
             <div className="space-y-1.5 flex-1 min-w-0">
               {turn.sentences.map((s, i) => (
                 <div key={i} className="space-y-0.5">
-                  <p className="text-gray-800 break-words">{s.sentence}</p>
+                  <p className="text-foreground break-words">{s.sentence}</p>
                   {expanded && (
-                    <p className="text-xs text-gray-400 font-mono break-all">{s.taibun}</p>
+                    <p className="text-xs text-muted-foreground font-mono break-all">{s.taibun}</p>
                   )}
                 </div>
               ))}
               {!turn.done && (
-                <span className="inline-block w-2 h-4 bg-gray-300 rounded animate-pulse" />
+                <span className="inline-block w-2 h-4 bg-muted rounded animate-pulse" />
               )}
             </div>
           </div>
@@ -280,7 +277,7 @@ function TurnCard({ turn }: { turn: ConversationTurn }) {
         {turn.sentences.length > 0 && (
           <button
             onClick={() => setExpanded((v) => !v)}
-            className="text-xs text-gray-400 hover:text-gray-600"
+            className="text-xs text-muted-foreground hover:text-foreground"
           >
             {expanded ? "▲ 收起台羅" : "▼ 展開台羅拼音"}
           </button>
@@ -294,9 +291,9 @@ function TurnCard({ turn }: { turn: ConversationTurn }) {
 
 function Latency({ label, ms }: { label: string; ms: number }) {
   const color =
-    ms < 1000 ? "text-green-600 bg-green-50" :
-    ms < 2000 ? "text-yellow-600 bg-yellow-50" :
-    "text-red-600 bg-red-50";
+    ms < 1000 ? "text-green-600 bg-green-500/10" :
+    ms < 2000 ? "text-yellow-600 bg-yellow-500/10 dark:text-yellow-400" :
+    "text-red-600 bg-red-500/10 dark:text-red-400";
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${color}`}>
       <span className="opacity-70">{label}</span>

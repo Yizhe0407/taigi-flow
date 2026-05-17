@@ -2,13 +2,18 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { AgentProfile } from "@taigi-flow/db";
-import { PencilLine, Trash2, Plus, Radio } from "lucide-react";
+import { BookOpen, Plus, Radio, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { confirmDialog } from "@/components/confirm-dialog";
+import { PageHeader } from "@/components/page-header";
 import { cn } from "@/lib/utils";
 
 export default function AgentList({ initial }: { initial: AgentProfile[] }) {
+  const router = useRouter();
   const [profiles, setProfiles] = useState(initial);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -23,18 +28,30 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
       });
       if (!res.ok) throw new Error(await res.text());
       setProfiles((prev) => prev.map((x) => ({ ...x, isActive: x.id === p.id })));
+      toast.success(`已啟用「${p.name}」`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "啟用失敗");
     } finally {
       setBusy(null);
     }
   }
 
-  async function deleteProfile(p: AgentProfile) {
-    if (!confirm(`刪除「${p.name}」？此操作無法復原。`)) return;
+  async function deleteProfile(e: React.MouseEvent, p: AgentProfile) {
+    e.stopPropagation();
+    const ok = await confirmDialog({
+      title: "刪除人格",
+      description: `確定要刪除「${p.name}」？此操作無法復原。`,
+      confirmLabel: "刪除",
+    });
+    if (!ok) return;
     setBusy(p.id);
     try {
       const res = await fetch(`/api/agent-profiles/${p.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error(await res.text());
       setProfiles((prev) => prev.filter((x) => x.id !== p.id));
+      toast.success(`已刪除「${p.name}」`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除失敗");
     } finally {
       setBusy(null);
     }
@@ -42,21 +59,21 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Agent 人格管理</h1>
-        <Link href="/agents/new" className={cn(buttonVariants(), "gap-1.5")}>
-          <Plus size={16} /> 新增人格
-        </Link>
-      </div>
-
-      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-4">
-        <span>同一時間只能啟用一個人格。</span>
-        <span>·</span>
-        <span>切換後，<strong>下次使用者重新連線</strong>時自動套用新人格（不須重啟腳本）。</span>
-      </div>
+      <PageHeader
+        title="Agent 人格"
+        description="同一時間只能啟用一個人格，切換後下次連線自動套用"
+        action={
+          <Link href="/agents/new" className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}>
+            <Plus className="size-4" />
+            新增人格
+          </Link>
+        }
+      />
 
       {profiles.length === 0 && (
-        <p className="text-muted-foreground text-sm">尚無 Agent 人格，請新增一個。</p>
+        <p className="text-muted-foreground text-sm py-8 text-center">
+          尚無 Agent 人格，請新增一個。
+        </p>
       )}
 
       <div className="space-y-2">
@@ -64,24 +81,29 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
           <div
             key={p.id}
             className={cn(
-              "flex items-center gap-4 p-4 rounded-lg border transition-colors",
+              "flex items-center gap-4 p-4 rounded-lg border transition-colors cursor-pointer",
               p.isActive
-                ? "border-primary/40 bg-primary/5"
-                : "border-border bg-card opacity-70 hover:opacity-90 cursor-pointer",
+                ? "border-primary/40 bg-primary/5 hover:bg-primary/10"
+                : "border-border bg-card hover:bg-accent/30",
             )}
-            onClick={() => !p.isActive && !busy && activate(p)}
+            onClick={() => router.push(`/agents/${p.id}`)}
           >
-            <Button
+            {/* Active toggle — click stops propagation to prevent nav */}
+            <button
+              className="shrink-0 p-0.5 rounded"
               title={p.isActive ? "目前啟用中" : "點擊啟用"}
               disabled={p.isActive || busy === p.id}
-              variant="ghost"
-              size="icon-sm"
               onClick={(e) => { e.stopPropagation(); void activate(p); }}
-              className="shrink-0"
             >
-              <Radio size={20} className={p.isActive ? "text-primary" : "text-muted-foreground"} />
-            </Button>
+              <Radio
+                className={cn(
+                  "size-5",
+                  p.isActive ? "text-primary" : "text-muted-foreground/40",
+                )}
+              />
+            </button>
 
+            {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-medium">{p.name}</span>
@@ -92,23 +114,25 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
               )}
             </div>
 
+            {/* Direct action buttons */}
             <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-              <Link
-                href={`/agents/${p.id}`}
-                title="編輯"
-                className={cn(buttonVariants({ variant: "ghost", size: "icon-sm" }))}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                title="知識庫"
+                onClick={() => router.push(`/knowledge/${p.id}`)}
               >
-                <PencilLine size={16} />
-              </Link>
+                <BookOpen className="size-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon-sm"
                 title="刪除"
                 disabled={busy === p.id}
-                onClick={() => void deleteProfile(p)}
                 className="text-muted-foreground hover:text-destructive"
+                onClick={(e) => void deleteProfile(e, p)}
               >
-                <Trash2 size={16} />
+                <Trash2 className="size-4" />
               </Button>
             </div>
           </div>

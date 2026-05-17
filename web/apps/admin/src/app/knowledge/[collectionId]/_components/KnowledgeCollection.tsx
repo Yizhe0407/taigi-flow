@@ -1,9 +1,19 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  FileType2,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { confirmDialog } from "@/components/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 
 type Chunk = {
   id: string;
@@ -29,11 +39,17 @@ type Props = {
   initialJobs: Job[];
 };
 
+function FileIcon({ name, className }: { name: string; className?: string }) {
+  const ext = name.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return <FileType2 className={className} />;
+  return <FileText className={className} />;
+}
+
 const STATUS_COLOR: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-700",
-  processing: "bg-blue-100 text-blue-700",
-  done: "bg-green-100 text-green-700",
-  failed: "bg-red-100 text-red-700",
+  pending: "bg-yellow-500/10 text-yellow-600 dark:text-yellow-400",
+  processing: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+  done: "bg-green-500/10 text-green-600 dark:text-green-400",
+  failed: "bg-red-500/10 text-red-600 dark:text-red-400",
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -52,11 +68,14 @@ export default function KnowledgeCollection({
   const [chunks, setChunks] = useState<Chunk[]>(initialChunks);
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
   const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [deletingJob, setDeletingJob] = useState<string | null>(null);
   const [deletingChunk, setDeletingChunk] = useState<string | null>(null);
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
     const [chunksRes, jobsRes] = await Promise.all([
@@ -110,34 +129,59 @@ export default function KnowledgeCollection({
     return acc;
   }, {});
 
-  async function handleUpload(e: React.FormEvent) {
-    e.preventDefault();
-    const file = fileRef.current?.files?.[0];
+  function onFileSelect(file: File | undefined) {
     if (!file) return;
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!["pdf", "md", "txt", "docx"].includes(ext ?? "")) {
+      toast.error(`不支援 .${ext ?? "?"} 格式，請上傳 PDF、Markdown、TXT 或 DOCX`);
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("檔案超過 20 MB 上限");
+      return;
+    }
+    setSelectedFile(file);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setIsDragging(false);
+    onFileSelect(e.dataTransfer.files[0]);
+  }
+
+  async function handleUpload() {
+    if (!selectedFile) return;
     setUploading(true);
-    setUploadError(null);
+    setUploadProgress(10);
     try {
       const form = new FormData();
-      form.append("file", file);
+      form.append("file", selectedFile);
+      setUploadProgress(40);
       const res = await fetch(`/api/knowledge/${collectionId}/upload`, {
         method: "POST",
         body: form,
       });
+      setUploadProgress(80);
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(typeof d.error === "string" ? d.error : JSON.stringify(d));
       }
+      setUploadProgress(100);
+      setSelectedFile(null);
       if (fileRef.current) fileRef.current.value = "";
+      toast.success(`「${selectedFile.name}」上傳成功，等待 ingest worker 處理`);
       await refresh();
     } catch (err) {
-      setUploadError(err instanceof Error ? err.message : String(err));
+      toast.error(err instanceof Error ? err.message : "上傳失敗");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   }
 
   async function deleteJob(jobId: string, fileName: string) {
-    if (!confirm(`確定要刪除「${fileName}」及其所有 chunks 嗎？`)) return;
+    const ok = await confirmDialog({ description: `確定要刪除「${fileName}」及其所有 chunks 嗎？`, confirmLabel: "刪除" });
+    if (!ok) return;
     setDeletingJob(jobId);
     try {
       const res = await fetch(`/api/knowledge/${collectionId}/jobs/${jobId}`, {
@@ -167,7 +211,8 @@ export default function KnowledgeCollection({
   }
 
   async function deleteCollection() {
-    if (!confirm(`確定要刪除「${profileName}」知識庫的所有內容嗎？`)) return;
+    const ok = await confirmDialog({ title: "清空知識庫", description: `確定要刪除「${profileName}」知識庫的所有內容嗎？此操作無法復原。`, confirmLabel: "清空" });
+    if (!ok) return;
     await fetch(`/api/knowledge/${collectionId}`, { method: "DELETE" });
     setChunks([]);
     setJobs([]);
@@ -179,7 +224,7 @@ export default function KnowledgeCollection({
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">{profileName} — 知識庫</h1>
-          <p className="text-xs text-gray-400 mt-0.5">{collectionId}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{collectionId}</p>
         </div>
         <Button variant="destructive" size="sm" onClick={deleteCollection}>
           清空知識庫
@@ -187,25 +232,79 @@ export default function KnowledgeCollection({
       </div>
 
       {/* Upload */}
-      <section className="border border-border rounded-lg p-5 space-y-3">
-        <h2 className="font-semibold">上傳文件</h2>
-        <p className="text-sm text-gray-500">支援 PDF、Markdown、TXT、DOCX，最大 20 MB。</p>
-        {uploadError && (
-          <Alert variant="destructive">
-            <AlertDescription>{uploadError}</AlertDescription>
-          </Alert>
+      <section className="space-y-3">
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".pdf,.md,.txt,.docx"
+          className="hidden"
+          onChange={(e) => onFileSelect(e.target.files?.[0])}
+        />
+
+        {/* Dropzone */}
+        <div
+          ref={dropRef}
+          onClick={() => !selectedFile && fileRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={onDrop}
+          className={[
+            "relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-10 text-center transition-colors",
+            isDragging
+              ? "border-primary bg-primary/5 scale-[1.01]"
+              : selectedFile
+                ? "border-primary/40 bg-primary/5"
+                : "border-border hover:border-primary/50 hover:bg-muted/30 cursor-pointer",
+          ].join(" ")}
+        >
+          {selectedFile ? (
+            <>
+              <FileIcon name={selectedFile.name} className="size-12 text-primary" />
+              <div>
+                <p className="font-medium text-sm">{selectedFile.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {(selectedFile.size / 1024).toFixed(0)} KB
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="absolute top-3 right-3 text-muted-foreground hover:text-foreground"
+                onClick={(e) => { e.stopPropagation(); setSelectedFile(null); if (fileRef.current) fileRef.current.value = ""; }}
+              >
+                <X className="size-4" />
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="flex size-14 items-center justify-center rounded-full bg-muted">
+                <Upload className="size-6 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="font-medium text-sm">拖放文件到這裡，或點擊選取</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  支援 PDF、Markdown、TXT、DOCX，最大 20 MB
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Upload progress */}
+        {uploading && (
+          <div className="space-y-1.5">
+            <Progress value={uploadProgress} className="h-1.5" />
+            <p className="text-xs text-muted-foreground text-center">上傳中…</p>
+          </div>
         )}
-        <form onSubmit={handleUpload} className="flex gap-3 items-center">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".pdf,.md,.txt,.docx"
-            className="flex-1 text-sm border border-border rounded px-3 py-1.5 bg-white"
-          />
-          <Button type="submit" disabled={uploading}>
-            {uploading ? "上傳中…" : "上傳"}
+
+        {/* Upload button */}
+        {selectedFile && !uploading && (
+          <Button className="w-full gap-2" onClick={() => void handleUpload()}>
+            <Upload className="size-4" />
+            上傳「{selectedFile.name}」
           </Button>
-        </form>
+        )}
       </section>
 
       {/* File list */}
@@ -215,7 +314,7 @@ export default function KnowledgeCollection({
         </h2>
 
         {jobs.length === 0 && Object.keys(orphanGroups).length === 0 ? (
-          <p className="text-sm text-gray-400">尚未上傳任何文件。</p>
+          <p className="text-sm text-muted-foreground">尚未上傳任何文件。</p>
         ) : (
           <div className="space-y-2">
             {jobs.map((job) => {
@@ -224,12 +323,12 @@ export default function KnowledgeCollection({
               const canExpand = job.status === "done" && job.chunkCount > 0;
 
               return (
-                <div key={job.id} className="border border-border rounded-lg bg-white overflow-hidden">
+                <div key={job.id} className="border border-border rounded-lg bg-card overflow-hidden">
                   {/* Job row */}
                   <div className="flex items-center gap-3 px-4 py-3">
                     {/* Expand toggle */}
                     <button
-                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30 shrink-0"
+                      className="text-muted-foreground hover:text-foreground disabled:opacity-30 shrink-0"
                       disabled={!canExpand}
                       onClick={() => toggleExpand(job.id)}
                       aria-label={expanded ? "收合" : "展開"}
@@ -242,7 +341,7 @@ export default function KnowledgeCollection({
 
                     {/* Status badge */}
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLOR[job.status] ?? "bg-gray-100 text-gray-600"}`}
+                      className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${STATUS_COLOR[job.status] ?? "bg-muted text-muted-foreground"}`}
                     >
                       {STATUS_LABEL[job.status] ?? job.status}
                     </span>
@@ -251,7 +350,7 @@ export default function KnowledgeCollection({
                     <span className="font-medium truncate flex-1">{job.fileName}</span>
 
                     {/* Metadata */}
-                    <div className="flex items-center gap-3 text-sm text-gray-400 shrink-0">
+                    <div className="flex items-center gap-3 text-sm text-muted-foreground shrink-0">
                       {job.status === "done" && (
                         <span>{job.chunkCount} chunks</span>
                       )}
@@ -266,7 +365,7 @@ export default function KnowledgeCollection({
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-gray-400 hover:text-red-500"
+                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         disabled={deletingJob === job.id}
                         onClick={() => deleteJob(job.id, job.fileName)}
                         aria-label="刪除此檔案"
@@ -280,16 +379,16 @@ export default function KnowledgeCollection({
                   {expanded && (
                     <div className="border-t border-border divide-y divide-border">
                       {jobChunks.map((chunk, i) => (
-                        <div key={chunk.id} className="flex items-start gap-3 px-4 py-3 bg-gray-50">
-                          <span className="text-xs text-gray-400 w-6 shrink-0 pt-0.5">#{i + 1}</span>
-                          <p className="text-sm text-gray-700 flex-1 line-clamp-3">
+                        <div key={chunk.id} className="flex items-start gap-3 px-4 py-3 bg-muted/30">
+                          <span className="text-xs text-muted-foreground w-6 shrink-0 pt-0.5">#{i + 1}</span>
+                          <p className="text-sm text-foreground flex-1 line-clamp-3">
                             {chunk.content.slice(0, 300)}
                             {chunk.content.length > 300 ? "…" : ""}
                           </p>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 w-7 p-0 text-gray-300 hover:text-red-500 shrink-0"
+                            className="h-7 w-7 p-0 text-muted-foreground/40 hover:text-destructive shrink-0"
                             disabled={deletingChunk === chunk.id}
                             onClick={() => deleteChunk(chunk.id)}
                             aria-label="刪除此 chunk"
@@ -308,10 +407,10 @@ export default function KnowledgeCollection({
               const key = `orphan-${src}`;
               const expanded = expandedJobs.has(key);
               return (
-                <div key={key} className="border border-dashed border-border rounded-lg bg-white overflow-hidden">
+                <div key={key} className="border border-dashed border-border rounded-lg bg-card overflow-hidden">
                   <div className="flex items-center gap-3 px-4 py-3">
                     <button
-                      className="text-gray-400 hover:text-gray-700 shrink-0"
+                      className="text-muted-foreground hover:text-foreground shrink-0"
                       onClick={() => toggleExpand(key)}
                       aria-label={expanded ? "收合" : "展開"}
                     >
@@ -320,17 +419,18 @@ export default function KnowledgeCollection({
                         : <ChevronRight className="w-4 h-4" />
                       }
                     </button>
-                    <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0">
+                    <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground shrink-0">
                       無紀錄
                     </span>
-                    <span className="font-medium truncate flex-1 text-gray-500">{src}</span>
-                    <span className="text-sm text-gray-400 shrink-0">{grpChunks.length} chunks</span>
+                    <span className="font-medium truncate flex-1 text-muted-foreground">{src}</span>
+                    <span className="text-sm text-muted-foreground shrink-0">{grpChunks.length} chunks</span>
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="h-7 w-7 p-0 text-gray-400 hover:text-red-500 shrink-0"
+                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive shrink-0"
                       onClick={async () => {
-                        if (!confirm(`確定要刪除「${src}」的所有 chunks 嗎？`)) return;
+                        const ok = await confirmDialog({ description: `確定要刪除「${src}」的所有 chunks 嗎？`, confirmLabel: "刪除" });
+                        if (!ok) return;
                         const results = await Promise.all(
                           grpChunks.map((c) =>
                             fetch(`/api/knowledge/${collectionId}/chunks/${c.id}`, {
@@ -340,7 +440,7 @@ export default function KnowledgeCollection({
                         );
                         const failed = results.filter((r) => !r.ok).length;
                         if (failed > 0) {
-                          alert(`${failed} 個 chunk 刪除失敗，請重新整理後再試。`);
+                          toast.error(`${failed} 個 chunk 刪除失敗，請重新整理後再試。`);
                         }
                         const succeeded = grpChunks.filter((_, i) => results[i].ok);
                         setChunks((prev) =>
@@ -355,16 +455,16 @@ export default function KnowledgeCollection({
                   {expanded && (
                     <div className="border-t border-border divide-y divide-border">
                       {grpChunks.map((chunk, i) => (
-                        <div key={chunk.id} className="flex items-start gap-3 px-4 py-3 bg-gray-50">
-                          <span className="text-xs text-gray-400 w-6 shrink-0 pt-0.5">#{i + 1}</span>
-                          <p className="text-sm text-gray-700 flex-1 line-clamp-3">
+                        <div key={chunk.id} className="flex items-start gap-3 px-4 py-3 bg-muted/30">
+                          <span className="text-xs text-muted-foreground w-6 shrink-0 pt-0.5">#{i + 1}</span>
+                          <p className="text-sm text-foreground flex-1 line-clamp-3">
                             {chunk.content.slice(0, 300)}
                             {chunk.content.length > 300 ? "…" : ""}
                           </p>
                           <Button
                             variant="ghost"
                             size="sm"
-                            className="h-7 w-7 p-0 text-gray-300 hover:text-red-500 shrink-0"
+                            className="h-7 w-7 p-0 text-muted-foreground/40 hover:text-destructive shrink-0"
                             disabled={deletingChunk === chunk.id}
                             onClick={() => deleteChunk(chunk.id)}
                             aria-label="刪除此 chunk"
