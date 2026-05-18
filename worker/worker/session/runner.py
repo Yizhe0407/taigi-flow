@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from ..db.repositories import InteractionLogRepository
     from ..pipeline.rag import RagRetriever
     from ..pipeline.tts import PiperTTS
+    from ..tools.base import BaseTool
     from .components import AgentComponents
 
 logger = logging.getLogger("worker.session.runner")
@@ -73,6 +74,7 @@ class PipelineRunner:
         self._realtime: RealtimePublisher = components.realtime
         self._agent_name: str = components.agent_name
         self._rag: RagRetriever | None = components.rag_retriever
+        self._tools: list[BaseTool] = components.tools
         self._pipeline_busy = False
         self._utterance_seq = 0
         self._turn_index = 0
@@ -470,10 +472,18 @@ class PipelineRunner:
             nonlocal full_response, first_token_ms, token_count, partial_flag
             try:
                 async with asyncio.timeout(self._llm_total_timeout):
-                    async for token in await self._llm.stream(
-                        messages=self._memory.to_messages(),
-                        max_tokens=_parse_int_env("LLM_MAX_TOKENS"),
-                    ):
+                    if self._tools:
+                        token_stream = await self._llm.stream_with_tools(
+                            messages=self._memory.to_messages(),
+                            tools=self._tools,
+                            max_tokens=_parse_int_env("LLM_MAX_TOKENS"),
+                        )
+                    else:
+                        token_stream = await self._llm.stream(
+                            messages=self._memory.to_messages(),
+                            max_tokens=_parse_int_env("LLM_MAX_TOKENS"),
+                        )
+                    async for token in token_stream:
                         token_count += 1
                         if first_token_ms is None:
                             first_token_ms = (time.perf_counter() - llm_start) * 1000
