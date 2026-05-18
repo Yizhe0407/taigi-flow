@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector  # type: ignore[import-untyped]
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -158,3 +158,90 @@ class IngestJob(Base):
         onupdate=now_utc,
         nullable=False,
     )
+
+
+# ============ 公車路線 ============
+
+
+class BusOperator(Base):
+    __tablename__ = "BusOperator"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    code: Mapped[str] = mapped_column(String, nullable=False)
+    nameZh: Mapped[str] = mapped_column(String, nullable=False)
+    nameEn: Mapped[str] = mapped_column(String, nullable=False)
+
+    routes: Mapped[list["BusRoute"]] = relationship(
+        "BusRoute", back_populates="operator"
+    )
+
+
+class BusRoute(Base):
+    __tablename__ = "BusRoute"
+
+    uid: Mapped[str] = mapped_column(String, primary_key=True)
+    routeId: Mapped[str] = mapped_column(String, nullable=False)
+    nameZh: Mapped[str] = mapped_column(String, nullable=False)
+    nameEn: Mapped[str] = mapped_column(String, nullable=False)
+    headsign: Mapped[str | None] = mapped_column(String, nullable=True)
+    direction: Mapped[int] = mapped_column(Integer, nullable=False)
+    city: Mapped[str] = mapped_column(String, nullable=False)
+    operatorId: Mapped[str] = mapped_column(
+        String, ForeignKey("BusOperator.id"), nullable=False
+    )
+
+    operator: Mapped[BusOperator] = relationship("BusOperator", back_populates="routes")
+    stops: Mapped[list["RouteStop"]] = relationship(
+        "RouteStop", back_populates="route"
+    )
+    schedules: Mapped[list["BusSchedule"]] = relationship(
+        "BusSchedule", back_populates="route"
+    )
+
+
+class BusStop(Base):
+    __tablename__ = "BusStop"
+
+    uid: Mapped[str] = mapped_column(String, primary_key=True)
+    stopId: Mapped[str] = mapped_column(String, nullable=False)
+    nameZh: Mapped[str] = mapped_column(String, nullable=False)
+    nameEn: Mapped[str] = mapped_column(String, nullable=False)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lng: Mapped[float] = mapped_column(Float, nullable=False)
+    address: Mapped[str | None] = mapped_column(String, nullable=True)
+    city: Mapped[str] = mapped_column(String, nullable=False)
+
+    routeStops: Mapped[list["RouteStop"]] = relationship(
+        "RouteStop", back_populates="stop"
+    )
+
+
+class RouteStop(Base):
+    __tablename__ = "RouteStop"
+
+    routeUid: Mapped[str] = mapped_column(
+        String, ForeignKey("BusRoute.uid"), primary_key=True
+    )
+    stopUid: Mapped[str] = mapped_column(
+        String, ForeignKey("BusStop.uid"), primary_key=True
+    )
+    sequence: Mapped[int] = mapped_column(Integer, primary_key=True)
+    boarding: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    route: Mapped[BusRoute] = relationship("BusRoute", back_populates="stops")
+    stop: Mapped[BusStop] = relationship("BusStop", back_populates="routeStops")
+
+
+class BusSchedule(Base):
+    __tablename__ = "BusSchedule"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    routeUid: Mapped[str] = mapped_column(
+        String, ForeignKey("BusRoute.uid"), nullable=False
+    )
+    tripId: Mapped[str] = mapped_column(String, nullable=False)
+    serviceDays: Mapped[int] = mapped_column(Integer, nullable=False)
+    isLowFloor: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    stopTimes: Mapped[list[Any]] = mapped_column(JSONB, nullable=False)
+
+    route: Mapped[BusRoute] = relationship("BusRoute", back_populates="schedules")
