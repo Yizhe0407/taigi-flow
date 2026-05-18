@@ -208,4 +208,11 @@ class LLMClient:
                         }
                     )
 
+            # Every round had tool calls — yield fallback so runner logs an error flag.
+            logger.warning(
+                "stream_with_tools: exhausted max_rounds=%d without text response",
+                max_rounds,
+            )
+            yield "（工具呼叫次數超過上限，無法產生回覆）"
+
         return _gen()

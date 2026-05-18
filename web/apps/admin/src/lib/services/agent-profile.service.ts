@@ -75,5 +75,11 @@ export async function createAgentProfile(data: Prisma.AgentProfileCreateInput) {
       return tx.agentProfile.create({ data });
     });
   }
+  // Preserve "at least one active role" invariant: if no active profile exists,
+  // force this new one active regardless of the requested isActive value.
+  const activeCount = await prisma.agentProfile.count({ where: { isActive: true } });
+  if (activeCount === 0) {
+    return prisma.agentProfile.create({ data: { ...data, isActive: true } });
+  }
   return prisma.agentProfile.create({ data });
 }

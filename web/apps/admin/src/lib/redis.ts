@@ -11,7 +11,9 @@ export function getRedis(): RedisClient {
     g.__adminRedis.on("error", (err) =>
       console.error("[redis]", err.message),
     );
-    void g.__adminRedis.connect();
+    g.__adminRedis.connect().catch((err: Error) =>
+      console.error("[redis] initial connect failed:", err.message),
+    );
   }
   return g.__adminRedis;
 }

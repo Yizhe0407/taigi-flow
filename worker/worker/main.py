@@ -16,13 +16,27 @@ from .session.runner import PipelineRunner
 
 logger = logging.getLogger("worker")
 
+# Single-session guard: reject concurrent jobs (process-level, not thread-safe,
+# but the asyncio event loop ensures only one entrypoint runs at a time).
+_job_active = False
+
 
 async def request_fnc(req: JobRequest) -> None:
+    if _job_active:
+        logger.warning(
+            "Rejecting job for room %s — another session is active"
+            " (single-session design)",
+            req.room.name,
+        )
+        await req.reject()
+        return
     logger.info("Accepting job for room %s", req.room.name)
     await req.accept()
 
 
 async def entrypoint(ctx: JobContext) -> None:
+    global _job_active
+    _job_active = True
     logger.info("Agent starting...")
     reset_session()
 
@@ -120,6 +134,7 @@ async def entrypoint(ctx: JobContext) -> None:
     except asyncio.CancelledError:
         logger.info("Agent stopped.")
     finally:
+        _job_active = False
         if components.log_repo is not None and components.session_id:
             try:
                 await components.log_repo.end_session(components.session_id)

@@ -22,6 +22,9 @@ logger = logging.getLogger(__name__)
 _POLL_INTERVAL = 5.0
 _MAX_RETRY = 3
 _STALE_THRESHOLD = timedelta(minutes=5)
+# Guard against malicious/pathological documents that produce excessive chunks
+# and exhaust embed-batch memory or DB write time.
+_MAX_CHUNKS = 2000
 
 
 class IngestRunner:
@@ -97,6 +100,11 @@ class IngestRunner:
                 chunks = await asyncio.get_event_loop().run_in_executor(
                     None, chunk_file, job.filePath
                 )
+                if len(chunks) > _MAX_CHUNKS:
+                    raise ValueError(
+                        f"Document produced {len(chunks)} chunks, "
+                        f"exceeds limit of {_MAX_CHUNKS}"
+                    )
                 logger.info(
                     "Job %s: %d chunks from %s", job.id, len(chunks), job.fileName
                 )

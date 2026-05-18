@@ -36,7 +36,7 @@ Worker 啟動後**不需要指定 room**。當前端用戶按下「Start Convers
 | `DATABASE_URL` | PostgreSQL 連線字串 |
 | `ASR_BACKEND` | `qwen3` 或 `breeze26` |
 | `ASR_URL` | ASR HTTP API endpoint |
-| `PIPER_MODEL_PATH` | Piper TTS model 路徑（或設 `PIPER_API_URL`） |
+| `PIPER_MODEL_PATH` | Piper TTS model 路徑（或設 `PIPER_TTS_API_URL`） |
 | `LLM_BASE_URL` | LLM API base URL（OpenAI-compatible） |
 | `LLM_MODEL` | 模型名稱 |
 

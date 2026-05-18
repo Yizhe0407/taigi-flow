@@ -329,6 +329,12 @@ class AudioProcessor:
                 pass
             except Exception as e:
                 logger.error("VAD consumer task exited with error: %s", e)
+            # Cancel any in-flight ASR/LLM/TTS tasks spawned for this track.
+            pending = list(self._bg_tasks)
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
 
 def _frame_bytes(data: Any) -> bytes:
