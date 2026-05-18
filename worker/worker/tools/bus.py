@@ -231,6 +231,29 @@ async def _find_routes(
             )
         sections.append("【直達】\n" + "\n".join(direct_lines))
 
+        # Publish stops of first direct route to map
+        first_uid = direct[0][0]
+        map_stop_rows = (await db.execute(
+            select(RouteStop, BusStop)
+            .join(BusStop, RouteStop.stopUid == BusStop.uid)
+            .where(RouteStop.routeUid == first_uid)
+            .order_by(RouteStop.sequence)
+        )).all()
+        if map_stop_rows:
+            await publish_map_event({
+                "type": "bus.route_stops",
+                "route": uid_to_name.get(first_uid, first_uid),
+                "stops": [
+                    {
+                        "name": cast("BusStop", r[1]).nameZh,
+                        "lat": cast("BusStop", r[1]).lat,
+                        "lng": cast("BusStop", r[1]).lng,
+                        "sequence": cast("RouteStop", r[0]).sequence,
+                    }
+                    for r in map_stop_rows
+                ],
+            })
+
     # ── 轉乘查詢 ─────────────────────────────────────────────────────────────
     if max_transfers >= 1:
         transfers = await _find_transfer_routes(db, from_uids, to_uids, limit=3)
@@ -410,6 +433,15 @@ async def _list_stops(
     return header + "\n" + "\n".join(stop_names), stops_data
 
 
+def _time_to_minutes(t: str) -> int:
+    """Convert HH:MM or H:MM (including GTFS 24:xx overflow) to total minutes."""
+    try:
+        h, m = t.split(":")[:2]
+        return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return -1
+
+
 async def _next_departures(
     db: AsyncSession,
     stop_query: str,
@@ -418,7 +450,7 @@ async def _next_departures(
     limit: int,
 ) -> str:
     taipei_now = datetime.now(_TAIPEI)
-    current_time = taipei_now.strftime("%H:%M")
+    current_minutes = taipei_now.hour * 60 + taipei_now.minute
 
     # Find matching stops
     stops = await _search_stops(db, stop_query, None, 3)
@@ -429,44 +461,52 @@ async def _next_departures(
     # Find routes serving these stops
     rs_stmt = select(RouteStop).where(RouteStop.stopUid.in_(stop_uids))
     if route_query:
-        # Filter by route name
-        route_stmt = select(BusRoute.uid).where(
-            BusRoute.nameZh.ilike(f"%{route_query}%")
-        )
-        route_uids = [r[0] for r in (await db.execute(route_stmt)).all()]
-        rs_stmt = rs_stmt.where(RouteStop.routeUid.in_(route_uids))
+        route_uids_for_filter = [
+            r[0]
+            for r in (
+                await db.execute(
+                    select(BusRoute.uid).where(BusRoute.nameZh.ilike(f"%{route_query}%"))
+                )
+            ).all()
+        ]
+        rs_stmt = rs_stmt.where(RouteStop.routeUid.in_(route_uids_for_filter))
 
     route_stops_rows = (await db.execute(rs_stmt)).scalars().all()
     if not route_stops_rows:
         return f"找不到「{stop_query}」的路線資料"
 
-    # For each route-stop, find today's schedules that haven't passed yet
+    # routeUid → set of stop sequences we care about for that route
+    route_seq_map: dict[str, set[int]] = {}
+    for rs in route_stops_rows:
+        route_seq_map.setdefault(rs.routeUid, set()).add(rs.sequence)
+
+    # Single batch query instead of N+1 per route-stop
+    sched_stmt = select(BusSchedule, BusRoute).join(
+        BusRoute, BusSchedule.routeUid == BusRoute.uid
+    ).where(
+        and_(
+            BusSchedule.routeUid.in_(list(route_seq_map.keys())),
+            (BusSchedule.serviceDays.op("&")(service_day_bit)) > 0,
+        )
+    )
+    all_schedules = (await db.execute(sched_stmt)).all()
+
     results: list[tuple[str, str, str]] = []  # (route_name, departure_time, trip_id)
 
-    for rs in route_stops_rows:
-        sched_stmt = select(BusSchedule, BusRoute).join(
-            BusRoute, BusSchedule.routeUid == BusRoute.uid
-        ).where(
-            and_(
-                BusSchedule.routeUid == rs.routeUid,
-                (BusSchedule.serviceDays.op("&")(service_day_bit)) > 0,
-            )
-        )
-        schedules = (await db.execute(sched_stmt)).all()
-
-        for sched, bus_route in schedules:
-            stop_times: list[dict[str, Any]] = sched.stopTimes  # type: ignore[assignment]
-            for st in stop_times:
-                if st.get("sequence") == rs.sequence:
-                    arrival = st.get("arrivalTime", "")
-                    if arrival and arrival > current_time:
-                        results.append((bus_route.nameZh, arrival, sched.tripId))
-                    break
+    for sched, bus_route in all_schedules:
+        sequences = route_seq_map.get(sched.routeUid, set())
+        stop_times: list[dict[str, Any]] = sched.stopTimes  # type: ignore[assignment]
+        for st in stop_times:
+            if st.get("sequence") in sequences:
+                arrival = st.get("arrivalTime", "")
+                if arrival and _time_to_minutes(arrival) > current_minutes:
+                    results.append((bus_route.nameZh, arrival, sched.tripId))
+                break
 
     if not results:
         return f"「{stop_query}」今日接下來沒有班次"
 
-    results.sort(key=lambda x: x[1])
+    results.sort(key=lambda x: _time_to_minutes(x[1]))
     results = results[:limit]
     stop_name = stops[0]["nameZh"]
     lines = [f"{name} {t}" for name, t, _ in results]

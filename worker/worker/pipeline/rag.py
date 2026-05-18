@@ -90,6 +90,7 @@ class RagRetriever:
                     FROM "KnowledgeChunk"
                     WHERE "collectionId" = :cid
                       AND embedding IS NOT NULL
+                      AND (:model_id IS NULL OR metadata->>'modelId' = :model_id)
                     ORDER BY embedding <=> CAST(:vec AS vector)
                     LIMIT :k
                 """),
@@ -97,6 +98,7 @@ class RagRetriever:
                     "vec": str(vec),
                     "cid": self._collection_id,
                     "k": self._top_k,
+                    "model_id": self._embedder.model_name,
                 },
             )
             results: list[Any] = list(rows.fetchall())

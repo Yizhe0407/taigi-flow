@@ -63,8 +63,16 @@ export async function DELETE(req: Request): Promise<Response> {
   try {
     const body = await parseJson(req, sessionBatchDeleteSchema);
 
+    const cutoff = new Date(Date.now() - STALE_MS);
     const activeCount = await prisma.session.count({
-      where: { id: { in: body.ids }, endedAt: null },
+      where: {
+        id: { in: body.ids },
+        endedAt: null,
+        OR: [
+          { startedAt: { gte: cutoff } },
+          { logs: { some: { createdAt: { gte: cutoff } } } },
+        ],
+      },
     });
     if (activeCount > 0) {
       return error(`${activeCount} 個 Session 仍在進行中，無法刪除`, 409);

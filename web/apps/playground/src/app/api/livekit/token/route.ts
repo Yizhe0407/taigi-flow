@@ -65,6 +65,7 @@ function resolveClientWsUrl(
 export async function POST(request: Request) {
   try {
     const ip =
+      request.headers.get("x-real-ip") ??
       request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
       "unknown";
     if (!checkRateLimit(ip)) {

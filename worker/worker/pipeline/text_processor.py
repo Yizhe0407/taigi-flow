@@ -115,6 +115,8 @@ class TextProcessor:
         result = await session.execute(stmt)
         db_max: datetime | None = result.scalar_one_or_none()
         if db_max is None:
+            self._dictionary = []
+            self._dict_last_updated = None
             return
         if self._dict_last_updated is None or db_max > self._dict_last_updated:
             result2 = await session.execute(self._dict_query())

@@ -14,6 +14,9 @@ export async function POST(req: Request): Promise<Response> {
       if (e instanceof Error && e.message === "InteractionLog not found") {
         return error("InteractionLog not found", 404);
       }
+      if (e instanceof Error && e.message === "AgentProfile not found") {
+        return error("AgentProfile not found", 404);
+      }
       throw e;
     }
     return ok(result.entry, { status: result.created ? 201 : 200 });

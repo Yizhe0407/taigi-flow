@@ -318,7 +318,7 @@ export default function Playground() {
   const [connectionDetails, setConnectionDetails] = useState<ConnectionDetails | null>(null);
   const [dispatchStatus, setDispatchStatus] = useState<DispatchStatus>("unknown");
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
-  const [tokenLoading, setTokenLoading] = useState(true);
+  const [tokenLoading, setTokenLoading] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [shouldConnect, setShouldConnect] = useState(false);
   const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied" | "error">("unknown");
@@ -364,8 +364,6 @@ export default function Playground() {
     return null;
   }, []);
 
-  useEffect(() => { void requestToken(); }, [requestToken]);
-
   const onConnectButtonClicked = useCallback(async () => {
     setStartError(null); setRoomError(null); setDeviceError(null);
     const details = connectionDetails ?? (await requestToken());
@@ -395,8 +393,8 @@ export default function Playground() {
   const onBackToStart = useCallback(() => {
     setSessionStarted(false); setShouldConnect(false); setConnected(false);
     setRoomError(null); setDeviceError(null);
-    void requestToken();
-  }, [requestToken]);
+    setConnectionDetails(null);
+  }, []);
 
   // ── Connected: full-screen split layout ──
   if (sessionStarted && connectionDetails) {

@@ -226,10 +226,9 @@ async def _import_stop_of_route(data_dir: Path, db: Any) -> None:
 
 
 async def _import_schedules(data_dir: Path, db: Any) -> None:
-    # IDs are fresh UUIDs each run — no conflict possible, skip upsert overhead.
-    # Always delete all schedules first so re-runs don't accumulate duplicates.
+    # Delete and re-insert in a single transaction so a mid-run failure never
+    # leaves the table empty. Intermediate commits are skipped intentionally.
     await db.execute(delete(BusSchedule))
-    await db.commit()
 
     schedule_path = data_dir / "schedule.json"
     batch: list[dict[str, Any]] = []
@@ -260,16 +259,15 @@ async def _import_schedules(data_dir: Path, db: Any) -> None:
                 )
                 if len(batch) >= _BATCH:
                     await db.execute(pg_insert(BusSchedule).values(batch))
-                    await db.commit()
                     total += len(batch)
-                    logger.info("  schedules inserted: %d", total)
+                    logger.info("  schedules buffered: %d", total)
                     batch = []
 
     if batch:
         await db.execute(pg_insert(BusSchedule).values(batch))
-        await db.commit()
         total += len(batch)
 
+    await db.commit()
     logger.info("Imported %d schedule timetables", total)
 
 

@@ -24,6 +24,14 @@ export async function upsertEntryFromLog(
   });
   if (!log) throw new Error("InteractionLog not found");
 
+  if (input.profileId) {
+    const profile = await prisma.agentProfile.findUnique({
+      where: { id: input.profileId },
+      select: { id: true },
+    });
+    if (!profile) throw new Error("AgentProfile not found");
+  }
+
   const profileId = input.profileId ?? log.session.agentProfileId;
   const priority = input.priority ?? 0;
 

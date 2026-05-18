@@ -105,12 +105,22 @@ class IngestRunner:
                 embeddings = await self._embedder.embed_batch(texts)
 
                 async with async_session_factory() as session:
-                    # Guard: admin may delete the job while we embed
+                    # Guard: admin may delete the job while we embed, or stale
+                    # recovery may have reset it to pending and another worker
+                    # may have picked it up already.
                     still_exists = await session.get(IngestJob, job.id)
                     if still_exists is None:
                         logger.warning(
                             "Job %s deleted during processing, discarding chunks",
                             job.id,
+                        )
+                        return
+                    if still_exists.status != "processing":
+                        logger.warning(
+                            "Job %s status changed to %s during embedding "
+                            "(stale reset + re-pickup?), discarding to avoid dups",
+                            job.id,
+                            still_exists.status,
                         )
                         return
                     for chunk, vec in zip(chunks, embeddings, strict=True):
