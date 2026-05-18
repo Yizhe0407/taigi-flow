@@ -18,9 +18,10 @@
 | 4 | [phase-4-barge-in.md](phase-4-barge-in.md) | W5 | ⬜ 未開始 |
 | 5 | [phase-5-admin-panel.md](phase-5-admin-panel.md) | W6 | ✅ 完成 |
 | 6 | [phase-6-rag-tools.md](phase-6-rag-tools.md) | W7 | ✅ 完成 |
-| 6.4 | [phase-6.4-bus-data.md](phase-6.4-bus-data.md) | W7.4 | ⬜ 未開始 |
+| 6.4 | [phase-6.4-bus-data.md](phase-6.4-bus-data.md) | W7.4 | ✅ 完成 |
 | 6.5 | [phase-6.5-map.md](phase-6.5-map.md) | W7.5 | ⬜ 未開始 |
 | 7 | [phase-7-polish.md](phase-7-polish.md) | W8 | ⬜ 未開始 |
+| 8 | [phase-8-otp-routing.md](phase-8-otp-routing.md) | — | ⬜ 未開始 |
 
 開始一個 Phase 時把 ⬜ 改成 🏗️（進行中），完成後改成 ✅。
 
