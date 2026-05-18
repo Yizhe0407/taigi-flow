@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, select, text
 
@@ -14,6 +15,8 @@ from ..db.session import async_session_factory
 from ..session.data_channel import publish_map_event
 from . import register
 from .base import BaseTool
+
+_TAIPEI = ZoneInfo("Asia/Taipei")
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -133,7 +136,7 @@ class NextDeparturesTool(BaseTool):
         limit: int = int(kwargs.get("limit", 3))
 
         if weekday is None:
-            weekday = datetime.now(UTC).weekday()
+            weekday = datetime.now(_TAIPEI).weekday()
         bit = 1 << ((weekday + 1) % 7)
 
         async with async_session_factory() as db:
@@ -414,9 +417,7 @@ async def _next_departures(
     service_day_bit: int,
     limit: int,
 ) -> str:
-    from zoneinfo import ZoneInfo
-
-    taipei_now = datetime.now(ZoneInfo("Asia/Taipei"))
+    taipei_now = datetime.now(_TAIPEI)
     current_time = taipei_now.strftime("%H:%M")
 
     # Find matching stops

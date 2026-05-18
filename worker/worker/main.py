@@ -11,7 +11,7 @@ from livekit.agents import AutoSubscribe, JobContext, JobRequest, WorkerOptions,
 from .audio.processor import AudioProcessor
 from .audio.vad import SileroVAD
 from .session.components import build_components
-from .session.data_channel import set_client_location, set_participant
+from .session.data_channel import reset_session, set_client_location, set_participant
 from .session.runner import PipelineRunner
 
 logger = logging.getLogger("worker")
@@ -24,6 +24,7 @@ async def request_fnc(req: JobRequest) -> None:
 
 async def entrypoint(ctx: JobContext) -> None:
     logger.info("Agent starting...")
+    reset_session()
 
     components = await build_components(livekit_room=ctx.room.name)
 

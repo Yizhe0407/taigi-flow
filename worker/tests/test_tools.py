@@ -46,7 +46,8 @@ def test_to_openai_schema() -> None:
     schema = tool.to_openai_schema()
     assert schema["type"] == "function"
     fn = schema["function"]
-    assert fn["name"] == "dummy.test"
+    # api_name replaces dots with underscores for OpenAI API compatibility
+    assert fn["name"] == "dummy_test"
     assert fn["description"] == "A dummy tool for testing"
     assert fn["parameters"]["type"] == "object"
     assert "msg" in fn["parameters"]["properties"]

@@ -88,6 +88,10 @@ class InteractionLog(Base):
     latencyFirstAudio: Mapped[int | None] = mapped_column(Integer, nullable=True)
     latencyTotal: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    ragHitCount: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ragTopSim: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latencyRagMs: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
     wasBargedIn: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     errorFlag: Mapped[str | None] = mapped_column(String, nullable=True)
 

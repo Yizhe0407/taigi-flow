@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import aiohttp
@@ -241,7 +242,7 @@ class PoiNearbyTool(BaseTool):
     async def execute(self, **kwargs: Any) -> str:
         query: str = kwargs["query"]
         location_str: str | None = kwargs.get("location")
-        radius_m: int = int(kwargs.get("radius_m", 1000))
+        radius_m: int = max(1, min(int(kwargs.get("radius_m", 1000)), 5000))
 
         center: dict[str, Any] | None = None
         if location_str:
@@ -262,12 +263,15 @@ class PoiNearbyTool(BaseTool):
 
         lat, lng = center["lat"], center["lng"]
 
-        # Overpass QL: search amenity/shop by name keyword within radius
+        # Escape chars that could break the Overpass QL regex literal
+        safe_query = re.sub(r'["\\]', lambda m: "\\" + m.group(), query)
         overpass_query = (
             f"[out:json][timeout:5];"
             f"("
-            f'node[~"name|amenity|shop"~"{query}",i](around:{radius_m},{lat},{lng});'
-            f'way[~"name|amenity|shop"~"{query}",i](around:{radius_m},{lat},{lng});'
+            f'node[~"name|amenity|shop"~"{safe_query}",i]'
+            f"(around:{radius_m},{lat},{lng});"
+            f'way[~"name|amenity|shop"~"{safe_query}",i]'
+            f"(around:{radius_m},{lat},{lng});"
             f");"
             f"out center 10;"
         )

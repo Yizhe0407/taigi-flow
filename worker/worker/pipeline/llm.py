@@ -177,7 +177,9 @@ class LLMClient:
 
                 # Execute each tool call
                 for buf in tool_calls_buffer.values():
-                    tool = TOOL_REGISTRY.get(buf["name"])
+                    from ..tools import API_NAME_MAP
+                    internal_name = API_NAME_MAP.get(buf["name"], buf["name"])
+                    tool = TOOL_REGISTRY.get(internal_name)
                     t_start = asyncio.get_event_loop().time()
                     try:
                         args: dict[str, Any] = (

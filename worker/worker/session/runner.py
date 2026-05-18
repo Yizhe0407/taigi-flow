@@ -237,6 +237,7 @@ class PipelineRunner:
         last_hanlo: str = ""
         last_taibun: str = ""
         error_flag: str | None = None
+        rag_metrics: dict[str, float] | None = None
 
         _first_audio_fired = False
 
@@ -288,24 +289,22 @@ class PipelineRunner:
             rag_context = ""
             if self._rag is not None:
                 try:
-                    rag_chunks, rag_metrics = await self._rag.retrieve(user_text)
+                    rag_chunks, _rag_m = await self._rag.retrieve(user_text)
+                    rag_metrics = _rag_m
                     rag_context = self._rag.build_context_block(rag_chunks)
                     logger.info(
                         "[%s][rag] hits=%d top_sim=%.3f latency_ms=%.1f",
                         trace_id,
-                        int(rag_metrics["rag_hit_count"]),
-                        rag_metrics["rag_top_sim"],
-                        rag_metrics["latency_rag_ms"],
+                        int(_rag_m["rag_hit_count"]),
+                        _rag_m["rag_top_sim"],
+                        _rag_m["latency_rag_ms"],
                     )
                 except Exception as rag_err:
                     logger.warning("[%s][rag] retrieval failed: %s", trace_id, rag_err)
 
-            # Store only the original user text in memory — RAG context is ephemeral
-            # and must not accumulate in the sliding window across turns.
+            # Store only the original user text — RAG context is passed ephemerally
+            # to to_messages() and never written into history.
             self._memory.add("user", user_text)
-            # Inject RAG context into the last message for this turn only
-            if rag_context:
-                self._memory.inject_context(rag_context)
             await self._realtime.asr_done(self._session_id, self._agent_name, user_text)
             await publish_conv_event({"type": "conv.user", "text": user_text})
 
@@ -321,6 +320,7 @@ class PipelineRunner:
                     partial_flag,
                 ) = await self._run_llm_tts(
                     trace_id,
+                    rag_context=rag_context,
                     on_first_token=_on_first_token,
                     on_first_audio=_on_first_audio,
                 )
@@ -371,6 +371,7 @@ class PipelineRunner:
                         latencies=timer.as_dict(),
                         was_barged_in=self._was_barged_in,
                         error_flag=error_flag,
+                        rag_metrics=rag_metrics,
                     )
                 except Exception as log_err:
                     logger.error(
@@ -427,6 +428,7 @@ class PipelineRunner:
     async def _run_llm_tts(
         self,
         trace_id: str,
+        rag_context: str = "",
         on_first_token: Callable[[], None] | None = None,
         on_first_audio: Callable[[], None] | None = None,
     ) -> tuple[str, str, str, str | None]:
@@ -478,15 +480,16 @@ class PipelineRunner:
             nonlocal full_response, first_token_ms, token_count, partial_flag
             try:
                 async with asyncio.timeout(self._llm_total_timeout):
+                    msgs = self._memory.to_messages(extra_context=rag_context)
                     if self._tools:
                         token_stream = await self._llm.stream_with_tools(
-                            messages=self._memory.to_messages(),
+                            messages=msgs,
                             tools=self._tools,
                             max_tokens=_parse_int_env("LLM_MAX_TOKENS"),
                         )
                     else:
                         token_stream = await self._llm.stream(
-                            messages=self._memory.to_messages(),
+                            messages=msgs,
                             max_tokens=_parse_int_env("LLM_MAX_TOKENS"),
                         )
                     async for token in token_stream:

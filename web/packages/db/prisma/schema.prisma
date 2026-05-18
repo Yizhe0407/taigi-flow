@@ -54,6 +54,10 @@ model InteractionLog {
   latencyFirstAudio  Int?
   latencyTotal       Int?
 
+  ragHitCount  Int?
+  ragTopSim    Float?
+  latencyRagMs Int?
+
   wasBargedIn Boolean @default(false)
   errorFlag   String?
 

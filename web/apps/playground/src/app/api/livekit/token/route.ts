@@ -4,6 +4,23 @@ import { NextResponse } from "next/server";
 const AGENT_NAME = "taigi-agent";
 const ROOM_NAME = "playground";
 
+// Simple in-memory rate limiter: max 10 requests per IP per minute
+const _rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const bucket = _rateBuckets.get(ip);
+  if (!bucket || now >= bucket.resetAt) {
+    _rateBuckets.set(ip, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return true;
+  }
+  if (bucket.count >= RATE_LIMIT) return false;
+  bucket.count++;
+  return true;
+}
+
 function toHttpServiceUrl(url: string): string {
   if (url.startsWith("ws://")) {
     return `http://${url.slice("ws://".length)}`;
@@ -47,6 +64,13 @@ function resolveClientWsUrl(
 
 export async function POST(request: Request) {
   try {
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
+      "unknown";
+    if (!checkRateLimit(ip)) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
     const wsUrl = process.env.LIVEKIT_URL;

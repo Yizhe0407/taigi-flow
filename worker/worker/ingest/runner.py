@@ -5,9 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select, update
+from sqlalchemy import and_, select, update
 
 from worker.db.models import IngestJob, KnowledgeChunk
 from worker.db.session import async_session_factory
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 5.0
 _MAX_RETRY = 3
+_STALE_THRESHOLD = timedelta(minutes=5)
 
 
 class IngestRunner:
@@ -37,6 +39,29 @@ class IngestRunner:
 
     async def _poll_once(self) -> None:
         async with async_session_factory() as session:
+            # Recover jobs stuck in "processing" for longer than the stale threshold.
+            # updatedAt is set when status changes to "processing", so it serves as
+            # a processing-started timestamp.
+            stale_cutoff = datetime.now(UTC).replace(tzinfo=None) - _STALE_THRESHOLD
+            stale_result = await session.execute(
+                update(IngestJob)
+                .where(
+                    and_(
+                        IngestJob.status == "processing",
+                        IngestJob.updatedAt < stale_cutoff,
+                    )
+                )
+                .values(status="pending")
+                .returning(IngestJob.id)
+            )
+            stale_ids = stale_result.scalars().all()
+            if stale_ids:
+                logger.warning(
+                    "Reset %d stale processing job(s) to pending: %s",
+                    len(stale_ids),
+                    stale_ids,
+                )
+
             result = await session.execute(
                 select(IngestJob)
                 .where(IngestJob.status == "pending")
@@ -46,6 +71,7 @@ class IngestRunner:
             )
             job = result.scalar_one_or_none()
             if job is None:
+                await session.commit()
                 return
 
             await session.execute(
@@ -93,7 +119,11 @@ class IngestRunner:
                                 id=str(uuid.uuid4()),
                                 collectionId=job.collectionId,
                                 content=chunk.content,
-                                doc_metadata={**chunk.metadata, "jobId": job.id},
+                                doc_metadata={
+                                    **chunk.metadata,
+                                    "jobId": job.id,
+                                    "modelId": self._embedder.model_name,
+                                },
                                 embedding=vec,
                             )
                         )

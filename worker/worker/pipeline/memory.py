@@ -12,17 +12,20 @@ class SlidingWindowMemory:
         if len(self.history) > self.max_turns * 2:
             self.history = self.history[-(self.max_turns * 2) :]
 
-    def to_messages(self) -> list[dict[str, str]]:
-        return [{"role": "system", "content": self.system_prompt}] + self.history
-
-    def inject_context(self, context: str) -> None:
-        """Prepend ephemeral RAG context to the last user message for this turn only.
-        Not stored in history — disappears when the next turn's add() replaces it."""
-        if self.history and self.history[-1]["role"] == "user":
-            self.history[-1] = {
+    def to_messages(
+        self, extra_context: str = ""
+    ) -> list[dict[str, str]]:
+        """Return messages for LLM. extra_context is injected into the last user
+        message only in the returned list — history is never mutated."""
+        msgs: list[dict[str, str]] = [
+            {"role": "system", "content": self.system_prompt}
+        ] + list(self.history)
+        if extra_context and msgs and msgs[-1]["role"] == "user":
+            msgs[-1] = {
                 "role": "user",
-                "content": f"{context}\n{self.history[-1]['content']}",
+                "content": f"{extra_context}\n{msgs[-1]['content']}",
             }
+        return msgs
 
     def pop_last(self) -> None:
         if self.history:

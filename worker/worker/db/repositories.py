@@ -80,8 +80,10 @@ class InteractionLogRepository:
         latencies: dict[str, int] | None = None,
         was_barged_in: bool = False,
         error_flag: str | None = None,
+        rag_metrics: dict[str, float] | None = None,
     ) -> None:
         lat = latencies or {}
+        rag = rag_metrics or {}
         async with self._session() as db:
             db.add(
                 InteractionLog(
@@ -96,6 +98,13 @@ class InteractionLogRepository:
                     latencyLlmFirstTok=lat.get("llm_first_tok"),
                     latencyFirstAudio=lat.get("first_audio"),
                     latencyTotal=lat.get("total"),
+                    ragHitCount=(
+                        int(rag["rag_hit_count"]) if "rag_hit_count" in rag else None
+                    ),
+                    ragTopSim=rag.get("rag_top_sim"),
+                    latencyRagMs=(
+                        int(rag["latency_rag_ms"]) if "latency_rag_ms" in rag else None
+                    ),
                     wasBargedIn=was_barged_in,
                     errorFlag=error_flag,
                     createdAt=now_utc(),

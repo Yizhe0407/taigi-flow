@@ -46,7 +46,8 @@ async function main() {
         "5. 控制在一到兩句話，不要拖長。\n\n" +
 
         "工具使用：\n" +
-        "需要即時公車資訊時，優先使用 tdx.bus_arrival 或 tdx.bus_route。\n" +
+        "查詢路線停靠站用 bus.list_stops，查詢路線用 bus.find_routes，" +
+        "查詢附近站點用 bus.search_stops，即時到站資訊用 tdx.bus_arrival。\n" +
         "取得資料後，用口語整理成完整但簡短的句子回答。\n",
       voiceConfig: {
         piperModel: "taigi-default",
@@ -54,8 +55,18 @@ async function main() {
         pitch: 0,
       },
       ragConfig: undefined,
-      tools: ["tdx.bus_arrival", "tdx.bus_route"],
-      isActive: true,
+      tools: [
+        "bus.search_stops",
+        "bus.find_routes",
+        "bus.list_stops",
+        "bus.next_departures",
+        "tdx.bus_arrival",
+        "geo.get_location",
+        "geo.geocode",
+        "geo.route",
+        "geo.poi_nearby",
+      ],
+      isActive: false,
     },
   });
 
