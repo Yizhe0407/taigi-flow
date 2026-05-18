@@ -62,6 +62,11 @@ for _ch, _rom in _TAIBUN_PATCHES.items():
 _PROTECTED = re.compile(r"⟨([^⟩]*)⟩")
 
 
+def _entry_sort_key(e: PronunciationEntry) -> tuple[int, int, int]:
+    # Higher priority first; longer term first; profile before global when tied.
+    return (-e.priority, -len(e.term), 0 if e.profileId else 1)
+
+
 @dataclass
 class ProcessResult:
     hanlo: str
@@ -93,8 +98,8 @@ class TextProcessor:
             self._dict_loaded = True
             return
         result = await self._db_session.execute(self._dict_query())
-        entries = list(result.scalars())
-        entries.sort(key=lambda e: (-e.priority, -len(e.term), 0 if e.profileId else 1))
+        entries: list[PronunciationEntry] = list(result.scalars())
+        entries.sort(key=_entry_sort_key)
         self._dictionary = entries
         self._dict_last_updated = max(
             (e.updatedAt for e in entries), default=None
@@ -113,9 +118,8 @@ class TextProcessor:
             return
         if self._dict_last_updated is None or db_max > self._dict_last_updated:
             result2 = await session.execute(self._dict_query())
-            entries = list(result2.scalars())
-            _sort_key = lambda e: (-e.priority, -len(e.term), 0 if e.profileId else 1)  # noqa: E731
-            entries.sort(key=_sort_key)
+            entries: list[PronunciationEntry] = list(result2.scalars())
+            entries.sort(key=_entry_sort_key)
             self._dictionary = entries
             self._dict_last_updated = db_max
 
