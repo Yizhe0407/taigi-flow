@@ -125,6 +125,14 @@ _BUS_SYSTEM_PROMPT_FRAGMENT = """
 - 「Y02 現在到哪」/「還多久到」→ tdx.bus_arrival（即時）
 講站名與時間，不要念經緯度。"""
 
+_GEO_SYSTEM_PROMPT_FRAGMENT = """
+你有地圖工具：
+- 「你知道我在哪」/「我目前位置」/「我佇佗位」→ geo.get_location
+- 「X 在哪裡」/「定位 X」→ geo.geocode
+- 「從 X 到 Y 多遠」/「怎麼開車去」→ geo.route
+- 「附近的 X」/「周邊 X」→ geo.poi_nearby（不用問位置，GPS 已知）
+呼叫工具前先講「我看一下地圖」。講路線時說地名與時間，不要念座標。"""
+
 _BUS_TOOL_NAMES = {
     "bus.search_stops",
     "bus.find_routes",
@@ -132,6 +140,8 @@ _BUS_TOOL_NAMES = {
     "bus.next_departures",
     "tdx.bus_arrival",
 }
+
+_GEO_TOOL_NAMES = {"geo.get_location", "geo.geocode", "geo.route", "geo.poi_nearby"}
 
 
 async def _load_profile(
@@ -181,18 +191,22 @@ async def build_components(livekit_room: str) -> AgentComponents:
         system_prompt, profile_id, profile_name, rag_config, tool_names = (
             await _load_profile(db)
         )
-        # Import bus/tdx tools so they self-register via module-level register() calls
+        # Import tools so they self-register via module-level register() calls
         if any(n.startswith(("bus.", "tdx.")) for n in tool_names):
             import worker.tools.bus  # type: ignore[import-untyped]  # noqa: F401
             import worker.tools.tdx_realtime  # type: ignore[import-untyped]  # noqa: F401
+        if any(n.startswith("geo.") for n in tool_names):
+            import worker.tools.geo  # type: ignore[import-untyped]  # noqa: F401
 
         tools = get_tools(tool_names)
         if tools:
             logger.info("Loaded tools: %s", [t.name for t in tools])
 
-        # Append bus prompt fragment if bus tools are active
+        # Append tool-specific prompt fragments
         if any(n in _BUS_TOOL_NAMES for n in tool_names):
             system_prompt = system_prompt + _BUS_SYSTEM_PROMPT_FRAGMENT
+        if any(n in _GEO_TOOL_NAMES for n in tool_names):
+            system_prompt = system_prompt + _GEO_SYSTEM_PROMPT_FRAGMENT
 
         memory = SlidingWindowMemory(system_prompt=system_prompt)
         text_processor = TextProcessor(profile_id=profile_id, db_session=None)

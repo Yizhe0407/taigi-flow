@@ -13,8 +13,8 @@ import {
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const ROUTES: Record<string, string> = {
-  agents:     "Role",
-  knowledge:  "RAG",
+  agents:     "人格",
+  knowledge:  "知識庫",
   dictionary: "發音字典",
   sessions:   "對話日誌",
   monitor:    "即時監控",

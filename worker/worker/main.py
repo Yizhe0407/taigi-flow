@@ -1,5 +1,6 @@
 # pyright: reportUnknownMemberType=false, reportUntypedFunctionDecorator=false, reportUnusedFunction=false
 import asyncio
+import json
 import logging
 import os
 
@@ -10,6 +11,7 @@ from livekit.agents import AutoSubscribe, JobContext, JobRequest, WorkerOptions,
 from .audio.processor import AudioProcessor
 from .audio.vad import SileroVAD
 from .session.components import build_components
+from .session.data_channel import set_client_location, set_participant
 from .session.runner import PipelineRunner
 
 logger = logging.getLogger("worker")
@@ -88,8 +90,18 @@ async def entrypoint(ctx: JobContext) -> None:
                 pub.sid,
             )
 
+    @ctx.room.on("data_received")
+    def on_data_received(data_packet: rtc.DataPacket) -> None:
+        try:
+            msg = json.loads(data_packet.data)
+            if msg.get("type") == "client.location":
+                set_client_location(float(msg["lat"]), float(msg["lng"]))
+        except Exception:
+            pass
+
     await ctx.connect(auto_subscribe=AutoSubscribe.AUDIO_ONLY)
     logger.info("Connected to room: %s", ctx.room.name)
+    set_participant(ctx.room.local_participant)
 
     publication = await ctx.room.local_participant.publish_track(track, options)
     logger.info("Published agent audio track: %s", publication.sid)

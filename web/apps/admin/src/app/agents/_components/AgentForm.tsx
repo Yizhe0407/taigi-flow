@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import type { AgentProfile } from "@taigi-flow/db";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -11,16 +10,17 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/page-header";
+import KnowledgeCollection from "../../knowledge/[collectionId]/_components/KnowledgeCollection";
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 type FormState = {
   name: string;
   description: string;
   systemPrompt: string;
-  piperModel: string;
-  speed: string;
-  pitch: string;
   tools: string[];
   isActive: boolean;
   ragEnabled: boolean;
@@ -28,24 +28,77 @@ type FormState = {
   ragThreshold: string;
 };
 
-const AVAILABLE_TOOLS: { name: string; label: string; description: string }[] = [
-  { name: "bus.search_stops",    label: "公車站搜尋",     description: "依站名關鍵字模糊搜尋停靠站" },
-  { name: "bus.find_routes",     label: "路線查詢",       description: "查詢兩站之間的直達或一次轉乘路線" },
-  { name: "bus.list_stops",      label: "路線停靠站列表", description: "列出指定路線的完整停靠站序列" },
-  { name: "bus.next_departures", label: "班次查詢",       description: "查詢今日某站接下來的發車時間" },
-  { name: "tdx.bus_arrival",     label: "即時到站（TDX）",description: "透過 TDX API 查詢公車即時到站時間（需 TDX 憑證）" },
+type Chunk = {
+  id: string;
+  content: string;
+  metadata: Record<string, unknown>;
+  createdAt: Date | string;
+};
+
+type Job = {
+  id: string;
+  fileName: string;
+  filePath: string;
+  status: string;
+  chunkCount: number;
+  error: string | null;
+  createdAt: Date | string;
+};
+
+type KnowledgeData = {
+  initialChunks: Chunk[];
+  initialChunksHasMore: boolean;
+  initialJobs: Job[];
+};
+
+// ─── Tool definitions ────────────────────────────────────────────────────────
+
+const BUS_STATIC_TOOLS = [
+  "bus.search_stops",
+  "bus.find_routes",
+  "bus.list_stops",
+  "bus.next_departures",
+] as const;
+
+const GEO_TOOLS = [
+  "geo.get_location",
+  "geo.geocode",
+  "geo.route",
+  "geo.poi_nearby",
+] as const;
+
+type ToolGroup = {
+  tools: readonly string[];
+  label: string;
+  description: string;
+};
+
+const TOOL_GROUPS: ToolGroup[] = [
+  {
+    tools: BUS_STATIC_TOOLS,
+    label: "公車查詢",
+    description: "站名搜尋、路線查詢、停靠站列表、班次查詢",
+  },
+  {
+    tools: ["tdx.bus_arrival"],
+    label: "即時到站（TDX）",
+    description: "透過 TDX API 查詢公車即時到站（需設定 TDX_CLIENT_ID / SECRET）",
+  },
+  {
+    tools: GEO_TOOLS,
+    label: "地圖功能",
+    description: "GPS 定位、路線規劃、附近地點查詢（同步更新 Playground 地圖）",
+  },
 ];
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
 function profileToForm(p: AgentProfile): FormState {
-  const vc = p.voiceConfig as { piperModel: string; speed: number; pitch: number };
   const rc = p.ragConfig as { enabled?: boolean; topK?: number; threshold?: number } | null;
   return {
     name: p.name,
     description: p.description ?? "",
     systemPrompt: p.systemPrompt,
-    piperModel: vc.piperModel ?? "taigi-default",
-    speed: String(vc.speed ?? 1),
-    pitch: String(vc.pitch ?? 0),
     tools: (p.tools as string[]) ?? [],
     isActive: p.isActive,
     ragEnabled: rc?.enabled ?? false,
@@ -58,9 +111,6 @@ const DEFAULT: FormState = {
   name: "",
   description: "",
   systemPrompt: "",
-  piperModel: "taigi-default",
-  speed: "1",
-  pitch: "0",
   tools: [],
   isActive: true,
   ragEnabled: false,
@@ -68,7 +118,15 @@ const DEFAULT: FormState = {
   ragThreshold: "0.7",
 };
 
-export default function AgentForm({ profile }: { profile?: AgentProfile }) {
+// ─── Main component ───────────────────────────────────────────────────────────
+
+export default function AgentForm({
+  profile,
+  knowledgeData,
+}: {
+  profile?: AgentProfile;
+  knowledgeData?: KnowledgeData;
+}) {
   const router = useRouter();
   const isEdit = !!profile;
 
@@ -87,11 +145,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
         name: form.name,
         description: form.description || null,
         systemPrompt: form.systemPrompt,
-        voiceConfig: {
-          piperModel: form.piperModel,
-          speed: parseFloat(form.speed) || 1,
-          pitch: parseFloat(form.pitch) || 0,
-        },
+        voiceConfig: { piperModel: "taigi-default", speed: 1, pitch: 0 },
         ragConfig: isEdit && form.ragEnabled
           ? {
               enabled: true,
@@ -117,8 +171,11 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
       }
 
       toast.success(isEdit ? "人格已更新" : "人格已建立");
-      router.push("/agents");
-      router.refresh();
+      if (!isEdit) {
+        router.push("/agents");
+      } else {
+        router.refresh();
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "儲存失敗");
     } finally {
@@ -126,120 +183,47 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
     }
   }
 
+  const ragConfig = isEdit && form.ragEnabled
+    ? {
+        enabled: true,
+        collectionId: profile?.id ?? "",
+        topK: parseInt(form.ragTopK) || 3,
+        threshold: parseFloat(form.ragThreshold) || 0.7,
+      }
+    : null;
+
   return (
-    <div className="mx-auto max-w-2xl">
+    <div>
       <PageHeader
         title={isEdit ? "編輯人格" : "新增人格"}
         description={isEdit ? `ID: ${profile.id}` : "建立一個新的 Role 設定"}
       />
 
       <form onSubmit={submit} className="space-y-5">
+        <Tabs defaultValue="basic">
+          <TabsList className="w-full">
+            <TabsTrigger value="basic" className="flex-1">基本</TabsTrigger>
+            <TabsTrigger value="tools" className="flex-1">工具</TabsTrigger>
+            {isEdit && (
+              <TabsTrigger value="knowledge" className="flex-1">知識庫</TabsTrigger>
+            )}
+          </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">基本資訊</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+          {/* ── 基本 ── */}
+          <TabsContent value="basic" className="space-y-4 pt-4">
             <Field label="名稱" required htmlFor="name">
-              <Input id="name" required placeholder="例：公車站長" value={form.name} onChange={(e) => set("name", e.target.value)} />
+              <Input id="name" required placeholder="例：公車站長" value={form.name}
+                onChange={(e) => set("name", e.target.value)} />
             </Field>
             <Field label="說明" htmlFor="description">
-              <Input id="description" placeholder="簡短描述此人格的用途" value={form.description} onChange={(e) => set("description", e.target.value)} />
+              <Input id="description" placeholder="簡短描述此人格的用途" value={form.description}
+                onChange={(e) => set("description", e.target.value)} />
             </Field>
             <Field label="系統提示詞" required htmlFor="systemPrompt">
-              <Textarea id="systemPrompt" required rows={10} className="font-mono text-sm resize-y" placeholder="你是..." value={form.systemPrompt} onChange={(e) => set("systemPrompt", e.target.value)} />
+              <Textarea id="systemPrompt" required rows={12} className="font-mono text-sm resize-y"
+                placeholder="你是..." value={form.systemPrompt}
+                onChange={(e) => set("systemPrompt", e.target.value)} />
             </Field>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">語音設定</CardTitle>
-            <CardDescription>Piper TTS 模型與輸出參數</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Field label="Piper 模型" required htmlFor="piperModel">
-              <Input id="piperModel" required value={form.piperModel} onChange={(e) => set("piperModel", e.target.value)} />
-            </Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="速度" htmlFor="speed">
-                <Input id="speed" type="number" step="0.1" min="0.5" max="2" value={form.speed} onChange={(e) => set("speed", e.target.value)} />
-              </Field>
-              <Field label="音調" htmlFor="pitch">
-                <Input id="pitch" type="number" step="1" min="-10" max="10" value={form.pitch} onChange={(e) => set("pitch", e.target.value)} />
-              </Field>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">RAG</CardTitle>
-            <CardDescription>每輪對話自動從 RAG 知識庫檢索相關內容</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isEdit && (
-              <>
-                <label className="flex items-center gap-2.5 cursor-pointer">
-                  <Checkbox checked={form.ragEnabled} onCheckedChange={(v) => set("ragEnabled", v)} />
-                  <span className="text-sm font-medium">啟用 RAG 檢索</span>
-                </label>
-                {form.ragEnabled && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <Field label="Top-K" htmlFor="ragTopK">
-                      <Input id="ragTopK" type="number" min="1" max="10" step="1" value={form.ragTopK} onChange={(e) => set("ragTopK", e.target.value)} />
-                    </Field>
-                    <Field label="相似度門檻" htmlFor="ragThreshold">
-                      <Input id="ragThreshold" type="number" min="0" max="1" step="0.05" value={form.ragThreshold} onChange={(e) => set("ragThreshold", e.target.value)} />
-                    </Field>
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  <Link href={`/knowledge/${profile.id}`} className="text-primary hover:underline">
-                    前往 RAG 上傳文件 →
-                  </Link>
-                </p>
-              </>
-            )}
-            {!isEdit && (
-              <p className="text-sm text-muted-foreground">建立 Role 後即可設定 RAG。</p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">其他設定</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-1.5">
-              <Label>工具（Function Calling）</Label>
-              <div className="rounded-lg border p-3 space-y-2">
-                {AVAILABLE_TOOLS.map((tool) => (
-                  <label key={tool.name} className="flex items-start gap-2.5 cursor-pointer">
-                    <Checkbox
-                      checked={form.tools.includes(tool.name)}
-                      onCheckedChange={(checked) => {
-                        set(
-                          "tools",
-                          checked
-                            ? [...form.tools, tool.name]
-                            : form.tools.filter((t) => t !== tool.name),
-                        );
-                      }}
-                      className="mt-0.5"
-                    />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium leading-none">{tool.label}</p>
-                        <span className="text-xs text-muted-foreground font-mono">{tool.name}</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{tool.description}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
             <Separator />
             <label className="flex items-start gap-2.5 cursor-pointer">
               <Checkbox checked={form.isActive} onCheckedChange={(v) => set("isActive", v)} className="mt-0.5" />
@@ -251,14 +235,78 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
                 )}
               </div>
             </label>
-          </CardContent>
-        </Card>
+          </TabsContent>
 
-        <div className="flex gap-3">
+          {/* ── 工具 ── */}
+          <TabsContent value="tools" className="space-y-2 pt-4">
+            {TOOL_GROUPS.map((group) => (
+              <div key={group.label} className="rounded-lg border p-3">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <Checkbox
+                    checked={group.tools.every((n) => form.tools.includes(n))}
+                    onCheckedChange={(checked) => {
+                      const others = form.tools.filter((t) => !group.tools.includes(t));
+                      set("tools", checked ? [...others, ...group.tools] : others);
+                    }}
+                    className="mt-0.5"
+                  />
+                  <div>
+                    <p className="text-sm font-medium leading-none">{group.label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{group.description}</p>
+                  </div>
+                </label>
+              </div>
+            ))}
+          </TabsContent>
+
+          {/* ── 知識庫 ── */}
+          {isEdit && (
+            <TabsContent value="knowledge" className="space-y-4 pt-4">
+              {/* RAG settings */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">RAG 設定</CardTitle>
+                  <CardDescription>每輪對話自動從知識庫檢索相關內容</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-2.5 cursor-pointer">
+                    <Checkbox checked={form.ragEnabled}
+                      onCheckedChange={(v) => set("ragEnabled", v)} />
+                    <span className="text-sm font-medium">啟用 RAG 檢索</span>
+                  </label>
+                  {form.ragEnabled && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <Field label="Top-K" htmlFor="ragTopK">
+                        <Input id="ragTopK" type="number" min="1" max="10" step="1"
+                          value={form.ragTopK} onChange={(e) => set("ragTopK", e.target.value)} />
+                      </Field>
+                      <Field label="相似度門檻" htmlFor="ragThreshold">
+                        <Input id="ragThreshold" type="number" min="0" max="1" step="0.05"
+                          value={form.ragThreshold} onChange={(e) => set("ragThreshold", e.target.value)} />
+                      </Field>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Document management */}
+              <KnowledgeCollection
+                profileName={profile.name}
+                collectionId={profile.id}
+                ragConfig={ragConfig}
+                initialChunks={knowledgeData?.initialChunks ?? []}
+                initialChunksHasMore={knowledgeData?.initialChunksHasMore ?? false}
+                initialJobs={knowledgeData?.initialJobs ?? []}
+              />
+            </TabsContent>
+          )}
+        </Tabs>
+
+        {/* Save bar */}
+        <div className="flex gap-3 pt-1">
           <Button type="submit" disabled={saving}>{saving ? "儲存中…" : "儲存"}</Button>
           <Button type="button" variant="outline" onClick={() => router.push("/agents")}>取消</Button>
         </div>
-
       </form>
     </div>
   );

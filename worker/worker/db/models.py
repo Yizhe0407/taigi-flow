@@ -57,6 +57,9 @@ class Session(Base):
     endedAt: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=False), nullable=True
     )
+    currentLocation: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, nullable=True
+    )
 
     agentProfile: Mapped[AgentProfile] = relationship(
         "AgentProfile", back_populates="sessions"

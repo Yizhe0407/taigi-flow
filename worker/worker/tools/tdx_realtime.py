@@ -68,7 +68,8 @@ class TdxBusArrivalTool(BaseTool):
         "properties": {
             "city": {
                 "type": "string",
-                "description": "城市代碼，例如 Yunlin",
+                "description": "城市代碼，例如 YunlinCounty（雲林縣）、"
+                    "Taipei（台北市）",
             },
             "route": {
                 "type": "string",

@@ -11,6 +11,7 @@ from sqlalchemy import and_, select, text
 
 from ..db.models import BusRoute, BusSchedule, BusStop, RouteStop
 from ..db.session import async_session_factory
+from ..session.data_channel import publish_map_event
 from . import register
 from .base import BaseTool
 
@@ -99,9 +100,13 @@ class ListStopsTool(BaseTool):
         direction: int = int(kwargs.get("direction", 0))
 
         async with async_session_factory() as db:
-            result = await _list_stops(db, route, direction)
+            text_result, stops_data = await _list_stops(db, route, direction)
 
-        return result
+        if stops_data:
+            await publish_map_event(
+                {"type": "bus.route_stops", "route": route, "stops": stops_data}
+            )
+        return text_result
 
 
 class NextDeparturesTool(BaseTool):
@@ -358,14 +363,16 @@ async def _find_transfer_routes(
     return results
 
 
-async def _list_stops(db: AsyncSession, route_query: str, direction: int) -> str:
+async def _list_stops(
+    db: AsyncSession, route_query: str, direction: int
+) -> tuple[str, list[dict[str, Any]]]:
     # Find route by name
     stmt = select(BusRoute).where(
         and_(BusRoute.nameZh.ilike(f"%{route_query}%"), BusRoute.direction == direction)
     )
     routes = (await db.execute(stmt)).scalars().all()
     if not routes:
-        return f"找不到路線「{route_query}」（方向 {direction}）"
+        return f"找不到路線「{route_query}」（方向 {direction}）", []
 
     route = routes[0]
 
@@ -379,15 +386,25 @@ async def _list_stops(db: AsyncSession, route_query: str, direction: int) -> str
     rows = (await db.execute(stmt2)).all()
 
     if not rows:
-        return f"路線 {route.nameZh} 沒有站點資料"
+        return f"路線 {route.nameZh} 沒有站點資料", []
 
     stop_names: list[str] = []
+    stops_data: list[dict[str, Any]] = []
     for i, row in enumerate(rows):
         stop_obj = cast("BusStop", row[1])
+        rs = cast("RouteStop", row[0])
         stop_names.append(f"{i+1}. {stop_obj.nameZh}")
+        stops_data.append(
+            {
+                "name": stop_obj.nameZh,
+                "lat": stop_obj.lat,
+                "lng": stop_obj.lng,
+                "sequence": rs.sequence,
+            }
+        )
     dir_label = "去程" if direction == 0 else "返程"
     header = f"{route.nameZh}（{dir_label}）共 {len(stop_names)} 站："
-    return header + "\n" + "\n".join(stop_names)
+    return header + "\n" + "\n".join(stop_names), stops_data
 
 
 async def _next_departures(

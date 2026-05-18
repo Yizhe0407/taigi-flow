@@ -12,6 +12,7 @@ from ..audio.voice_controller import VoiceState
 from ..observability.metrics import LatencyTimer
 from ..pipeline.realtime import RealtimePublisher  # noqa: TCH001
 from ..pipeline.splitter import SmartSplitter
+from .data_channel import publish_conv_event
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -306,6 +307,7 @@ class PipelineRunner:
             if rag_context:
                 self._memory.inject_context(rag_context)
             await self._realtime.asr_done(self._session_id, self._agent_name, user_text)
+            await publish_conv_event({"type": "conv.user", "text": user_text})
 
             def _on_first_token() -> None:
                 timer.mark("llm_first_tok")
@@ -386,6 +388,7 @@ class PipelineRunner:
                 was_barged_in=self._was_barged_in,
                 error_flag=error_flag,
             )
+            await publish_conv_event({"type": "conv.agent_done"})
             # Only reset if no new turn has started (barge-in path sets _turn_gen).
             if self._turn_gen == my_gen:
                 self._pipeline_busy = False
@@ -461,6 +464,9 @@ class PipelineRunner:
                 self._realtime.llm_sentence(
                     self._session_id, sentence, res.hanlo, res.taibun
                 )
+            )
+            asyncio.create_task(
+                publish_conv_event({"type": "conv.agent_chunk", "text": sentence})
             )
             task: asyncio.Task[bytes] = asyncio.create_task(
                 self._synthesize_to_pcm(res.taibun, trace_id)

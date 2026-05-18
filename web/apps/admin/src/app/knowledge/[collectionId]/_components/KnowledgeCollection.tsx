@@ -14,7 +14,6 @@ import {
   FileType2,
   LoaderCircle,
   Search,
-  Settings2,
   Trash2,
   TriangleAlert,
   Upload,
@@ -422,42 +421,27 @@ export default function KnowledgeCollection({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold">{profileName} RAG</h1>
-            <Badge
-              variant={ragEnabled ? "secondary" : "outline"}
-              className={ragEnabled ? "bg-green-500/10 text-green-700 dark:text-green-300" : ""}
-            >
-              {ragEnabled ? "已啟用檢索" : "未啟用檢索"}
-            </Badge>
-            {!collectionMatchesRole && (
-              <Badge variant="destructive">collectionId 不一致</Badge>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground">{collectionId}</p>
-        </div>
-
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => router.push(`/agents/${collectionId}`)}
+          <Badge
+            variant={ragEnabled ? "secondary" : "outline"}
+            className={ragEnabled ? "bg-green-500/10 text-green-700 dark:text-green-300" : ""}
           >
-            <Settings2 className="size-4" />
-            調整 RAG 設定
-          </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            disabled={clearingCollection}
-            onClick={deleteCollection}
-          >
-            {clearingCollection && <LoaderCircle className="size-4 animate-spin" />}
-            {clearingCollection ? "清空中" : "清空 RAG"}
-          </Button>
+            {ragEnabled ? "已啟用檢索" : "未啟用檢索"}
+          </Badge>
+          {!collectionMatchesRole && (
+            <Badge variant="destructive">collectionId 不一致</Badge>
+          )}
         </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          disabled={clearingCollection}
+          onClick={deleteCollection}
+        >
+          {clearingCollection && <LoaderCircle className="size-4 animate-spin" />}
+          {clearingCollection ? "清空中" : "清空 RAG"}
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

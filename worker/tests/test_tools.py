@@ -1,3 +1,4 @@
+# pyright: reportPrivateUsage=false, reportUnusedImport=false
 """Tests for tool base class, registry, and bus static tools."""
 
 from __future__ import annotations
@@ -111,8 +112,9 @@ async def test_list_stops_not_found() -> None:
     mock_db = AsyncMock()
     mock_db.execute = AsyncMock(return_value=mock_result)
 
-    result = await bus_module._list_stops(mock_db, "不存在路線", 0)
-    assert "找不到路線" in result
+    text, stops = await bus_module._list_stops(mock_db, "不存在路線", 0)
+    assert "找不到路線" in text
+    assert stops == []
 
 
 @pytest.mark.asyncio

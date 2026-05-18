@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  BookOpen,
   Bot,
   History,
   LayoutDashboard,
@@ -25,11 +24,10 @@ import {
 } from "@/components/ui/sidebar";
 
 const NAV = [
-  { href: "/agents",     label: "Role", icon: Bot },
-  { href: "/knowledge",  label: "RAG",  icon: BookOpen },
-  { href: "/dictionary", label: "發音字典",   icon: MessageSquare },
-  { href: "/sessions",   label: "對話日誌",   icon: History },
-  { href: "/monitor",    label: "即時監控",   icon: Radio },
+  { href: "/agents",     label: "人格",   icon: Bot },
+  { href: "/dictionary", label: "發音字典", icon: MessageSquare },
+  { href: "/sessions",   label: "對話日誌", icon: History },
+  { href: "/monitor",    label: "即時監控", icon: Radio },
 ];
 
 export function AppSidebar() {

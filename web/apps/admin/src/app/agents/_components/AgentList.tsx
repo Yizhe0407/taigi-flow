@@ -4,7 +4,7 @@ import { startTransition, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { AgentProfile } from "@taigi-flow/db";
-import { BookOpen, Plus, Radio, Trash2 } from "lucide-react";
+import { Plus, Radio, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -72,7 +72,7 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
   return (
     <div>
       <PageHeader
-        title="Role"
+        title="人格"
         description="同一時間只能啟用一個，切換後下次連線自動套用"
         action={
           <Link href="/agents/new" className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}>
@@ -84,7 +84,7 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
 
       {profiles.length === 0 && (
         <p className="text-muted-foreground text-sm py-8 text-center">
-          尚無 Role，請新增一個。
+          尚無人格，請新增一個。
         </p>
       )}
 
@@ -128,14 +128,7 @@ export default function AgentList({ initial }: { initial: AgentProfile[] }) {
 
             {/* Direct action buttons */}
             <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                title="RAG"
-                onClick={() => router.push(`/knowledge/${p.id}`)}
-              >
-                <BookOpen className="size-4" />
-              </Button>
+
               <Button
                 variant="ghost"
                 size="icon-sm"

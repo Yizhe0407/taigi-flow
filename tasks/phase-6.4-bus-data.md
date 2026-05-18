@@ -134,7 +134,7 @@ model BusSchedule {
 
 ### P6.4-01：Tool Base Class + Registry
 
-- [ ] **檔**：`worker/worker/tools/base.py`
+- [x] **檔**：`worker/worker/tools/base.py`
 
   ```python
   class BaseTool(ABC):
@@ -153,7 +153,7 @@ model BusSchedule {
           }}
   ```
 
-- [ ] **檔**：`worker/worker/tools/__init__.py`
+- [x] **檔**：`worker/worker/tools/__init__.py`
 
   ```python
   TOOL_REGISTRY: dict[str, BaseTool] = {}
@@ -165,17 +165,17 @@ model BusSchedule {
       return [TOOL_REGISTRY[n] for n in names if n in TOOL_REGISTRY]
   ```
 
-- [ ] **AgentProfile.tools 載入**：`session/components.py` 啟動 session 時讀 `profile.tools: list[str]` → 取對應 tool 餵 LLM
-- [ ] **單元測試**：註冊 dummy tool、`to_openai_schema()` shape 正確
-- [ ] **Commit**：`feat(worker): add tool base class and registry`
+- [x] **AgentProfile.tools 載入**：`session/components.py` 啟動 session 時讀 `profile.tools: list[str]` → 取對應 tool 餵 LLM
+- [x] **單元測試**：註冊 dummy tool、`to_openai_schema()` shape 正確
+- [x] **Commit**：`feat(worker): add tool base class and registry`
 
 ---
 
 ### P6.4-02：Function Calling 完整迴圈
 
-- [ ] **檔**：`worker/worker/pipeline/llm.py`（擴 `stream_with_tools`）+ `session/components.py`（接線）
-- [ ] **現況問題**：`stream()` 把 `tools` 傳給 OpenAI，但若 LLM 回 `tool_calls` chunk，目前直接當文字流出
-- [ ] **解法**：
+- [x] **檔**：`worker/worker/pipeline/llm.py`（擴 `stream_with_tools`）+ `session/components.py`（接線）
+- [x] **現況問題**：`stream()` 把 `tools` 傳給 OpenAI，但若 LLM 回 `tool_calls` chunk，目前直接當文字流出
+- [x] **解法**：
 
   ```python
   async def stream_with_tools(messages, tools_objs, max_rounds=3):
@@ -212,50 +212,50 @@ model BusSchedule {
           # 進下一輪
   ```
 
-- [ ] **Pipeline 整合**：tool 執行期間 **TTS 不啟動**（不能讓使用者聽到半句被中斷）
+- [x] **Pipeline 整合**：tool 執行期間 **TTS 不啟動**（不能讓使用者聽到半句被中斷）
   - splitter 偵測到 round 是 tool call → buffer 不送 TTS
   - 進入文字 round 才開始送 TTS
-- [ ] **Log**：`tool_call_started`, `tool_call_completed`, `tool_name`, `latency_tool_ms`
-- [ ] **錯誤處理**：tool raise → 不中斷迴圈，把 error message 當 result 給 LLM continue
-- [ ] **Commit**：`feat(worker): add function calling loop with tool execution`
+- [x] **Log**：`tool_call_started`, `tool_call_completed`, `tool_name`, `latency_tool_ms`
+- [x] **錯誤處理**：tool raise → 不中斷迴圈，把 error message 當 result 給 LLM continue
+- [x] **Commit**：`feat(worker): add function calling loop with tool execution`
 
 ---
 
 ### P6.4-03：Bus Schema + Migration
 
-- [ ] **檔**：`web/packages/db/prisma/schema.prisma`（加 4 個 model）
-- [ ] **Migration**：`pnpm exec prisma migrate dev --name add_bus_models`
-- [ ] **SQLAlchemy 對應**：`worker/worker/db/models.py` 加 `BusRoute`, `BusStop`, `RouteStop`, `BusSchedule`, `BusOperator`
-- [ ] **Commit**：`feat(db): add bus route / stop / schedule models`
+- [x] **檔**：`web/packages/db/prisma/schema.prisma`（加 4 個 model）
+- [x] **Migration**：`pnpm exec prisma migrate dev --name add_bus_models`
+- [x] **SQLAlchemy 對應**：`worker/worker/db/models.py` 加 `BusRoute`, `BusStop`, `RouteStop`, `BusSchedule`, `BusOperator`
+- [x] **Commit**：`feat(db): add bus route / stop / schedule models`
 
 ---
 
 ### P6.4-04：Importer（JSON → DB）
 
-- [ ] **檔**：`worker/worker/scripts/import_bus.py`
-- [ ] **CLI**：`uv run python -m worker.scripts.import_bus --dir <path> [--clean]`
+- [x] **檔**：`worker/worker/scripts/import_bus.py`
+- [x] **CLI**：`uv run python -m worker.scripts.import_bus --dir <path> [--clean]`
   - `--clean`：先 truncate 4 張表再灌（idempotent demo）
   - 預設 upsert（更新就好）
-- [ ] **流程**：
+- [x] **流程**：
   1. 讀 `route.json` → upsert BusOperator + BusRoute（注意 SubRoute 結構，一筆 RouteUID 內可能多 SubRoutes，要展開）
   2. 讀 `stop.json` → upsert BusStop
   3. 讀 `stop_of_route.json` → 對 RouteStop 做 truncate-and-insert（避免序列錯亂）
   4. 讀 `schedule.json` → upsert BusSchedule
      - `ServiceDay {Sunday:1, Monday:1,...}` → bitmask
      - `StopTimes` 整段塞 Json
-- [ ] **驗證**：
+- [x] **驗證**：
   - 灌完後 `SELECT COUNT(*) FROM "BusRoute"` 應 = 12（小檔）
   - JOIN 查詢 Y02 完整停靠序列 → 對得起來
-- [ ] **大檔切換**：寫成 idempotent，未來解 zip 後重跑即可
-- [ ] **測試**：用 fixture（精簡 sample JSON）跑 e2e
-- [ ] **Commit**：`feat(worker): add bus data importer from tdx json`
+- [x] **大檔切換**：寫成 idempotent，未來解 zip 後重跑即可
+- [x] **測試**：用 fixture（精簡 sample JSON）跑 e2e
+- [x] **Commit**：`feat(worker): add bus data importer from tdx json`
 
 ---
 
 ### P6.4-05：Bus Static Tools
 
-- [ ] **檔**：`worker/worker/tools/bus.py`
-- [ ] **三支 tool**：
+- [x] **檔**：`worker/worker/tools/bus.py`
+- [x] **三支 tool**：
 
   | name | params | 回傳描述 |
   |------|--------|---------|
@@ -264,11 +264,11 @@ model BusSchedule {
   | `bus.list_stops` | `route: str, direction: int = 0` | 路線完整停靠序列 |
   | `bus.next_departures` | `stop: str, route?: str, weekday?: int, limit: int = 3` | 班表查詢：今天從某站、某路線、接下來 N 班 |
 
-- [ ] **實作要點**：
+- [x] **實作要點**：
   - 站名輸入容錯：用 `pg_trgm` 模糊匹配（先 ILIKE 直接比對，若 0 筆 fallback trigram similarity）
   - `next_departures` 用 `serviceDays & (1 << today_weekday)` 過濾
   - 時間用 `Asia/Taipei` 時區（已有 `worker/db/time.py`）
-- [ ] **回傳格式**：給 LLM 的字串描述要**簡潔**，不要塞經緯度（除非地圖工具用）
+- [x] **回傳格式**：給 LLM 的字串描述要**簡潔**，不要塞經緯度（除非地圖工具用）
 
   ```
   # bus.next_departures 範例
@@ -278,33 +278,33 @@ model BusSchedule {
 - [ ] **副通道**：執行完後**同時**推 LiveKit data channel（給 Phase 6.5 地圖畫）
   - payload: `{ type: "bus.route_stops", stops: [{name, lat, lng}, ...] }`
   - 若 Phase 6.5 還沒做，data channel 推送先寫但 frontend 無 listener 也無妨
-- [ ] **單元測試**：mock DB session，每支 tool 驗 SQL / 結果格式
-- [ ] **Commit**：`feat(worker): add bus static query tools`
+- [x] **單元測試**：mock DB session，每支 tool 驗 SQL / 結果格式
+- [x] **Commit**：`feat(worker): add bus static query tools`
 
 ---
 
 ### P6.4-06：TDX 即時到站 Tool
 
-- [ ] **檔**：`worker/worker/tools/tdx_realtime.py`
-- [ ] **TDX API**：
+- [x] **檔**：`worker/worker/tools/tdx_realtime.py`
+- [x] **TDX API**：
   - OAuth2：`https://tdx.transportdata.tw/auth/realms/TDXConnect/protocol/openid-connect/token`
   - Endpoint：`/api/basic/v2/Bus/EstimatedTimeOfArrival/City/{City}/{RouteName}`
-- [ ] **Tool**：`tdx.bus_arrival(city: str, route: str, stop?: str)`
+- [x] **Tool**：`tdx.bus_arrival(city: str, route: str, stop?: str)`
   - 回：某路線各站到站時間（或單站若提供 `stop`）
   - 給 LLM：`Y02 在斗六火車站約 5 分鐘到站、北港朝天宮 35 分鐘到站`
-- [ ] **Token 快取**：module-level，到期前 5min refresh，不打 Redis
-- [ ] **錯誤**：8s timeout、403/429 → 「即時資料這馬提無著」字串給 LLM
-- [ ] **Env**：`TDX_CLIENT_ID`, `TDX_CLIENT_SECRET`（plan.md L944 已預留）
-- [ ] **註冊申請**：https://tdx.transportdata.tw/ → 個人帳號 → 取 client_id/secret（免費）
-- [ ] **測試**：`respx` mock token + arrival endpoints
-- [ ] **Commit**：`feat(worker): implement tdx realtime bus arrival tool`
+- [x] **Token 快取**：module-level，到期前 5min refresh，不打 Redis
+- [x] **錯誤**：8s timeout、403/429 → 「即時資料這馬提無著」字串給 LLM
+- [x] **Env**：`TDX_CLIENT_ID`, `TDX_CLIENT_SECRET`（plan.md L944 已預留）
+- [x] **註冊申請**：https://tdx.transportdata.tw/ → 個人帳號 → 取 client_id/secret（免費）
+- [x] **測試**：`respx` mock token + arrival endpoints
+- [x] **Commit**：`feat(worker): implement tdx realtime bus arrival tool`
 
 ---
 
 ### P6.4-07：System Prompt 接線
 
-- [ ] **檔**：`worker/worker/session/components.py`（system prompt 拼接）
-- [ ] **加 prompt 片段**（依 AgentProfile.tools 動態判斷是否加入）：
+- [x] **檔**：`worker/worker/session/components.py`（system prompt 拼接）
+- [x] **加 prompt 片段**（依 AgentProfile.tools 動態判斷是否加入）：
 
   ```
   你有公車工具。若使用者問：
@@ -316,7 +316,7 @@ model BusSchedule {
   講站名與時間，不要念經緯度。
   ```
 
-- [ ] **Commit**：`feat(worker): add bus tools to system prompt`
+- [x] **Commit**：`feat(worker): add bus tools to system prompt`
 
 ---
 
@@ -334,16 +334,16 @@ model BusSchedule {
 ## Phase 6.4 完成標準
 
 **核心**
-- [ ] 4 個 JSON 灌進 DB，count 對得起來
-- [ ] LLM 問「Y02 經過哪些站」→ tool 回站序列、台語念站名
-- [ ] LLM 問「從斗六火車站到北港怎麼搭」→ tool 回直達路線、台語回答
-- [ ] LLM 問「Y02 現在到哪」→ TDX 即時 call、台語播報
-- [ ] Tool raise → LLM 接 error string，不 crash
-- [ ] Function calling 多輪：LLM 連續呼叫 2 個 tool 也正常
+- [x] 4 個 JSON 灌進 DB，count 對得起來
+- [x] LLM 問「Y02 經過哪些站」→ tool 回站序列、台語念站名
+- [x] LLM 問「從斗六火車站到北港怎麼搭」→ tool 回直達路線、台語回答
+- [x] LLM 問「Y02 現在到哪」→ TDX 即時 call、台語播報
+- [x] Tool raise → LLM 接 error string，不 crash
+- [x] Function calling 多輪：LLM 連續呼叫 2 個 tool 也正常
 
 **延伸（選做）**
-- [ ] `雲林客運.zip` 完整資料灌入（route > 100、schedule 完整）
-- [ ] 轉乘搜尋（`bus.find_routes` 支援 1 次轉乘）
+- [x] `雲林客運.zip` 完整資料灌入（route > 100、schedule 完整）
+- [x] 轉乘搜尋（`bus.find_routes` 支援 1 次轉乘）
 - [ ] PostGIS 「最近的站」（地圖整合可用）
 
 ---

@@ -19,7 +19,7 @@
 | 5 | [phase-5-admin-panel.md](phase-5-admin-panel.md) | W6 | ✅ 完成 |
 | 6 | [phase-6-rag-tools.md](phase-6-rag-tools.md) | W7 | ✅ 完成 |
 | 6.4 | [phase-6.4-bus-data.md](phase-6.4-bus-data.md) | W7.4 | ✅ 完成 |
-| 6.5 | [phase-6.5-map.md](phase-6.5-map.md) | W7.5 | ⬜ 未開始 |
+| 6.5 | [phase-6.5-map.md](phase-6.5-map.md) | W7.5 | ✅ 完成（P6.5-03 admin location picker 改用瀏覽器 GPS data channel 替代）|
 | 7 | [phase-7-polish.md](phase-7-polish.md) | W8 | ⬜ 未開始 |
 | 8 | [phase-8-otp-routing.md](phase-8-otp-routing.md) | — | ⬜ 未開始 |
 
