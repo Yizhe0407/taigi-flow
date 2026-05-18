@@ -21,12 +21,20 @@ type FormState = {
   piperModel: string;
   speed: string;
   pitch: string;
-  tools: string;
+  tools: string[];
   isActive: boolean;
   ragEnabled: boolean;
   ragTopK: string;
   ragThreshold: string;
 };
+
+const AVAILABLE_TOOLS: { name: string; label: string; description: string }[] = [
+  { name: "bus.search_stops",   label: "bus.search_stops",   description: "模糊搜尋公車站名" },
+  { name: "bus.find_routes",    label: "bus.find_routes",    description: "查詢兩站之間的直達路線" },
+  { name: "bus.list_stops",     label: "bus.list_stops",     description: "列出路線完整停靠站序列" },
+  { name: "bus.next_departures",label: "bus.next_departures",description: "查詢今日接下來班次" },
+  { name: "tdx.bus_arrival",    label: "tdx.bus_arrival",    description: "TDX 即時到站時間" },
+];
 
 function profileToForm(p: AgentProfile): FormState {
   const vc = p.voiceConfig as { piperModel: string; speed: number; pitch: number };
@@ -38,7 +46,7 @@ function profileToForm(p: AgentProfile): FormState {
     piperModel: vc.piperModel ?? "taigi-default",
     speed: String(vc.speed ?? 1),
     pitch: String(vc.pitch ?? 0),
-    tools: ((p.tools as string[]) ?? []).join(", "),
+    tools: (p.tools as string[]) ?? [],
     isActive: p.isActive,
     ragEnabled: rc?.enabled ?? false,
     ragTopK: String(rc?.topK ?? 3),
@@ -53,7 +61,7 @@ const DEFAULT: FormState = {
   piperModel: "taigi-default",
   speed: "1",
   pitch: "0",
-  tools: "",
+  tools: [],
   isActive: true,
   ragEnabled: false,
   ragTopK: "3",
@@ -67,7 +75,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
   const [form, setForm] = useState<FormState>(profile ? profileToForm(profile) : DEFAULT);
   const [saving, setSaving] = useState(false);
 
-  function set(key: keyof FormState, value: string | boolean) {
+  function set(key: keyof FormState, value: string | boolean | string[]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -92,7 +100,7 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
               threshold: form.ragThreshold !== "" ? parseFloat(form.ragThreshold) : 0.7,
             }
           : null,
-        tools: form.tools.split(",").map((s) => s.trim()).filter(Boolean),
+        tools: form.tools,
         isActive: form.isActive,
       };
 
@@ -204,9 +212,31 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
             <CardTitle className="text-base">其他設定</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Field label="工具（逗號分隔）" htmlFor="tools">
-              <Input id="tools" placeholder="tdx.bus_arrival, tdx.bus_route" value={form.tools} onChange={(e) => set("tools", e.target.value)} />
-            </Field>
+            <div className="space-y-1.5">
+              <Label>工具（Function Calling）</Label>
+              <div className="rounded-lg border p-3 space-y-2">
+                {AVAILABLE_TOOLS.map((tool) => (
+                  <label key={tool.name} className="flex items-start gap-2.5 cursor-pointer">
+                    <Checkbox
+                      checked={form.tools.includes(tool.name)}
+                      onCheckedChange={(checked) => {
+                        set(
+                          "tools",
+                          checked
+                            ? [...form.tools, tool.name]
+                            : form.tools.filter((t) => t !== tool.name),
+                        );
+                      }}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      <p className="text-sm font-mono font-medium leading-none">{tool.label}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{tool.description}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
             <Separator />
             <label className="flex items-start gap-2.5 cursor-pointer">
               <Checkbox checked={form.isActive} onCheckedChange={(v) => set("isActive", v)} className="mt-0.5" />
