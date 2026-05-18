@@ -14,6 +14,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import ijson  # type: ignore[import-untyped]
 from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -21,6 +22,8 @@ from ..db.models import BusOperator, BusRoute, BusSchedule, BusStop, RouteStop
 from ..db.session import async_session_factory
 
 logger = logging.getLogger(__name__)
+
+_BATCH = 500  # rows per INSERT
 
 
 # TDX ServiceDay keys in bitmask order (Sun=bit0=1, Mon=bit1=2, ..., Sat=bit6=64)
@@ -131,15 +134,33 @@ async def _import_routes(data_dir: Path, db: Any) -> None:
     logger.info("Imported %d operators, %d routes", len(op_rows), len(route_rows))
 
 
+async def _upsert_stops_batch(rows: list[dict[str, Any]], db: Any) -> None:
+    stmt = pg_insert(BusStop).values(rows)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["uid"],
+        set_={
+            "stopId": stmt.excluded.stopId,
+            "nameZh": stmt.excluded.nameZh,
+            "nameEn": stmt.excluded.nameEn,
+            "lat": stmt.excluded.lat,
+            "lng": stmt.excluded.lng,
+            "address": stmt.excluded.address,
+            "city": stmt.excluded.city,
+        },
+    )
+    await db.execute(stmt)
+
+
 async def _import_stops(data_dir: Path, db: Any) -> None:
     stops_raw: list[dict[str, Any]] = json.loads(
         (data_dir / "stop.json").read_text(encoding="utf-8")
     )
-    rows: list[dict[str, Any]] = []
+    batch: list[dict[str, Any]] = []
+    total = 0
     for s in stops_raw:
         pos = s.get("StopPosition", {})
         name: dict[str, str] = s.get("StopName", {})
-        rows.append(
+        batch.append(
             {
                 "uid": s["StopUID"],
                 "stopId": s["StopID"],
@@ -151,44 +172,37 @@ async def _import_stops(data_dir: Path, db: Any) -> None:
                 "city": s.get("City", ""),
             }
         )
+        if len(batch) >= _BATCH:
+            await _upsert_stops_batch(batch, db)
+            total += len(batch)
+            batch = []
 
-    if rows:
-        stmt = pg_insert(BusStop).values(rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["uid"],
-            set_={
-                "stopId": stmt.excluded.stopId,
-                "nameZh": stmt.excluded.nameZh,
-                "nameEn": stmt.excluded.nameEn,
-                "lat": stmt.excluded.lat,
-                "lng": stmt.excluded.lng,
-                "address": stmt.excluded.address,
-                "city": stmt.excluded.city,
-            },
-        )
-        await db.execute(stmt)
+    if batch:
+        await _upsert_stops_batch(batch, db)
+        total += len(batch)
 
     await db.commit()
-    logger.info("Imported %d stops", len(rows))
+    logger.info("Imported %d stops", total)
 
 
 async def _import_stop_of_route(data_dir: Path, db: Any) -> None:
     data: list[dict[str, Any]] = json.loads(
         (data_dir / "stop_of_route.json").read_text(encoding="utf-8")
     )
-    # Collect all affected sub-route UIDs, delete their RouteStops, then re-insert
-    route_uids = {entry["SubRouteUID"] for entry in data}
-    for uid in route_uids:
-        await db.execute(
-            delete(RouteStop).where(RouteStop.routeUid == uid)
-        )
 
-    rows: list[dict[str, Any]] = []
+    # Delete existing RouteStops in bulk batches (avoid N individual DELETEs)
+    route_uids = list({entry["SubRouteUID"] for entry in data})
+    for i in range(0, len(route_uids), _BATCH):
+        chunk = route_uids[i : i + _BATCH]
+        await db.execute(delete(RouteStop).where(RouteStop.routeUid.in_(chunk)))
+
+    batch: list[dict[str, Any]] = []
+    total = 0
     for entry in data:
         route_uid = entry["SubRouteUID"]
         for stop in entry.get("Stops", []):
             boarding_val = stop.get("StopBoarding", 1)
-            rows.append(
+            batch.append(
                 {
                     "routeUid": route_uid,
                     "stopUid": stop["StopUID"],
@@ -196,56 +210,67 @@ async def _import_stop_of_route(data_dir: Path, db: Any) -> None:
                     "boarding": boarding_val >= 0,
                 }
             )
+            if len(batch) >= _BATCH:
+                stmt = pg_insert(RouteStop).values(batch)
+                await db.execute(stmt.on_conflict_do_nothing())
+                total += len(batch)
+                batch = []
 
-    if rows:
-        await db.execute(pg_insert(RouteStop).values(rows))
+    if batch:
+        stmt = pg_insert(RouteStop).values(batch)
+        await db.execute(stmt.on_conflict_do_nothing())
+        total += len(batch)
 
     await db.commit()
-    logger.info("Imported %d route-stop associations", len(rows))
+    logger.info("Imported %d route-stop associations", total)
 
 
 async def _import_schedules(data_dir: Path, db: Any) -> None:
-    data: list[dict[str, Any]] = json.loads(
-        (data_dir / "schedule.json").read_text(encoding="utf-8")
-    )
-    rows: list[dict[str, Any]] = []
-    for entry in data:
-        route_uid = entry["SubRouteUID"]
-        for tt in entry.get("Timetables", []):
-            service_day = tt.get("ServiceDay", {})
-            stop_times = [
-                {
-                    "stopUid": st["StopUID"],
-                    "sequence": st["StopSequence"],
-                    "arrivalTime": st.get("ArrivalTime", ""),
-                }
-                for st in tt.get("StopTimes", [])
-            ]
-            rows.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "routeUid": route_uid,
-                    "tripId": str(tt.get("TripID", "")),
-                    "serviceDays": _service_day_bitmask(service_day),
-                    "isLowFloor": bool(tt.get("IsLowFloor", False)),
-                    "stopTimes": stop_times,
-                }
-            )
-
-    if rows:
-        stmt = pg_insert(BusSchedule).values(rows)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["id"],
-            set_={
-                "serviceDays": stmt.excluded.serviceDays,
-                "isLowFloor": stmt.excluded.isLowFloor,
-                "stopTimes": stmt.excluded.stopTimes,
-            },
-        )
-        await db.execute(stmt)
-
+    # IDs are fresh UUIDs each run — no conflict possible, skip upsert overhead.
+    # Always delete all schedules first so re-runs don't accumulate duplicates.
+    await db.execute(delete(BusSchedule))
     await db.commit()
-    logger.info("Imported %d schedule timetables", len(rows))
+
+    schedule_path = data_dir / "schedule.json"
+    batch: list[dict[str, Any]] = []
+    total = 0
+
+    with open(schedule_path, "rb") as f:
+        for entry in ijson.items(f, "item"):
+            route_uid: str = entry.get("SubRouteUID", "")
+            for tt in entry.get("Timetables", []):
+                service_day: dict[str, int] = tt.get("ServiceDay", {})
+                stop_times = [
+                    {
+                        "stopUid": st["StopUID"],
+                        "sequence": st["StopSequence"],
+                        "arrivalTime": st.get("ArrivalTime", ""),
+                    }
+                    for st in tt.get("StopTimes", [])
+                ]
+                batch.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "routeUid": route_uid,
+                        "tripId": str(tt.get("TripID", "")),
+                        "serviceDays": _service_day_bitmask(service_day),
+                        "isLowFloor": bool(tt.get("IsLowFloor", False)),
+                        "stopTimes": stop_times,
+                    }
+                )
+                if len(batch) >= _BATCH:
+                    await db.execute(pg_insert(BusSchedule).values(batch))
+                    await db.commit()
+                    total += len(batch)
+                    logger.info("  schedules inserted: %d", total)
+                    batch = []
+
+    if batch:
+        await db.execute(pg_insert(BusSchedule).values(batch))
+        await db.commit()
+        total += len(batch)
+
+    logger.info("Imported %d schedule timetables", total)
 
 
 async def run(data_dir: Path, clean: bool) -> None:
