@@ -20,12 +20,14 @@ from ..pipeline.rag import RagRetriever
 from ..pipeline.realtime import RealtimePublisher
 from ..pipeline.text_processor import TextProcessor
 from ..pipeline.tts import PiperTTS
+from ..tools import get_tools
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from ..ingest.embedder import Embedder
     from ..pipeline.asr.base import BaseASR
+    from ..tools.base import BaseTool
 
 logger = logging.getLogger("worker.session.components")
 
@@ -66,6 +68,7 @@ class AgentComponents:
     realtime: RealtimePublisher
     agent_name: str
     rag_retriever: RagRetriever | None = None
+    tools: list[BaseTool] = dataclasses.field(default_factory=list)  # type: ignore[assignment]
 
 
 def _build_tts() -> PiperTTS | None:
@@ -114,23 +117,41 @@ def _build_llm() -> LLMClient:
     )
 
 
+_BUS_SYSTEM_PROMPT_FRAGMENT = """
+你有公車工具。若使用者問：
+- 「Y02 經過哪些站」→ bus.list_stops
+- 「從 X 到 Y 怎麼搭」→ bus.find_routes（直達），若無 → 用 RAG 看異動公告
+- 「Y02 接下來幾點」→ bus.next_departures（用班表）
+- 「Y02 現在到哪」/「還多久到」→ tdx.bus_arrival（即時）
+講站名與時間，不要念經緯度。"""
+
+_BUS_TOOL_NAMES = {
+    "bus.search_stops",
+    "bus.find_routes",
+    "bus.list_stops",
+    "bus.next_departures",
+    "tdx.bus_arrival",
+}
+
+
 async def _load_profile(
     db: AsyncSession,
-) -> tuple[str, str | None, str, dict[str, object] | None]:
+) -> tuple[str, str | None, str, dict[str, object] | None, list[str]]:
     """Load the currently active profile from DB.
 
-    Returns (system_prompt, profile_id, profile_name, rag_config).
+    Returns (system_prompt, profile_id, profile_name, rag_config, tool_names).
     """
     repo = AgentProfileRepository(db)
     profile = await repo.get_active()
     if profile is None:
         logger.warning("No active profile in DB, using fallback prompt.")
-        return _FALLBACK_SYSTEM_PROMPT, None, "fallback", None
+        return _FALLBACK_SYSTEM_PROMPT, None, "fallback", None, []
     logger.info("Loaded active profile '%s' (id=%s)", profile.name, profile.id)
     rag: dict[str, object] | None = (
         dict(profile.ragConfig) if profile.ragConfig else None  # type: ignore[arg-type]
     )
-    return profile.systemPrompt, profile.id, profile.name, rag
+    tool_names: list[str] = list(profile.tools) if profile.tools else []  # type: ignore[arg-type]
+    return profile.systemPrompt, profile.id, profile.name, rag, tool_names
 
 
 async def build_components(livekit_room: str) -> AgentComponents:
@@ -155,8 +176,24 @@ async def build_components(livekit_room: str) -> AgentComponents:
 
     rag_retriever: RagRetriever | None = None
     rag_config: dict[str, object] | None
+    tool_names: list[str]
     async with async_session_factory() as db:
-        system_prompt, profile_id, profile_name, rag_config = await _load_profile(db)
+        system_prompt, profile_id, profile_name, rag_config, tool_names = (
+            await _load_profile(db)
+        )
+        # Import bus/tdx tools so they self-register via module-level register() calls
+        if any(n.startswith(("bus.", "tdx.")) for n in tool_names):
+            import worker.tools.bus  # type: ignore[import-untyped]  # noqa: F401
+            import worker.tools.tdx_realtime  # type: ignore[import-untyped]  # noqa: F401
+
+        tools = get_tools(tool_names)
+        if tools:
+            logger.info("Loaded tools: %s", [t.name for t in tools])
+
+        # Append bus prompt fragment if bus tools are active
+        if any(n in _BUS_TOOL_NAMES for n in tool_names):
+            system_prompt = system_prompt + _BUS_SYSTEM_PROMPT_FRAGMENT
+
         memory = SlidingWindowMemory(system_prompt=system_prompt)
         text_processor = TextProcessor(profile_id=profile_id, db_session=None)
         await text_processor.reload_if_updated(db)
@@ -215,4 +252,5 @@ async def build_components(livekit_room: str) -> AgentComponents:
         realtime=RealtimePublisher(),
         agent_name=profile_name,
         rag_retriever=rag_retriever,
+        tools=tools,
     )
