@@ -30,7 +30,7 @@ type FormState = {
 
 const AVAILABLE_TOOLS: { name: string; label: string; description: string }[] = [
   { name: "bus.search_stops",    label: "公車站搜尋",     description: "依站名關鍵字模糊搜尋停靠站" },
-  { name: "bus.find_routes",     label: "直達路線查詢",   description: "查詢兩站之間有哪些直達班次" },
+  { name: "bus.find_routes",     label: "路線查詢",       description: "查詢兩站之間的直達或一次轉乘路線" },
   { name: "bus.list_stops",      label: "路線停靠站列表", description: "列出指定路線的完整停靠站序列" },
   { name: "bus.next_departures", label: "班次查詢",       description: "查詢今日某站接下來的發車時間" },
   { name: "tdx.bus_arrival",     label: "即時到站（TDX）",description: "透過 TDX API 查詢公車即時到站時間（需 TDX 憑證）" },

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -51,12 +52,17 @@ class SearchStopsTool(BaseTool):
 
 class FindRoutesTool(BaseTool):
     name = "bus.find_routes"
-    description = "查詢兩站之間的直達公車路線"
+    description = "查詢兩站之間的直達或一次轉乘公車路線"
     parameters: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "from_stop": {"type": "string", "description": "出發站名或 UID"},
-            "to_stop": {"type": "string", "description": "目的站名或 UID"},
+            "from_stop": {"type": "string", "description": "出發站名"},
+            "to_stop": {"type": "string", "description": "目的站名"},
+            "max_transfers": {
+                "type": "integer",
+                "description": "最多轉乘次數：0 只找直達，1 允許一次轉乘（預設 1）",
+                "default": 1,
+            },
         },
         "required": ["from_stop", "to_stop"],
     }
@@ -64,9 +70,10 @@ class FindRoutesTool(BaseTool):
     async def execute(self, **kwargs: Any) -> str:
         from_stop: str = kwargs["from_stop"]
         to_stop: str = kwargs["to_stop"]
+        max_transfers: int = int(kwargs.get("max_transfers", 1))
 
         async with async_session_factory() as db:
-            result = await _find_routes(db, from_stop, to_stop)
+            result = await _find_routes(db, from_stop, to_stop, max_transfers)
 
         return result
 
@@ -163,7 +170,9 @@ async def _search_stops(
     return [{"uid": s.uid, "nameZh": s.nameZh, "city": s.city} for s in stops]
 
 
-async def _find_routes(db: AsyncSession, from_q: str, to_q: str) -> str:
+async def _find_routes(
+    db: AsyncSession, from_q: str, to_q: str, max_transfers: int = 1
+) -> str:
     from_stops = await _search_stops(db, from_q, None, 3)
     to_stops = await _search_stops(db, to_q, None, 3)
 
@@ -174,51 +183,179 @@ async def _find_routes(db: AsyncSession, from_q: str, to_q: str) -> str:
 
     from_uids = [s["uid"] for s in from_stops]
     to_uids = [s["uid"] for s in to_stops]
+    from_name = from_stops[0]["nameZh"]
+    to_name = to_stops[0]["nameZh"]
 
-    # Find routes that serve both stops, with from before to
+    # ── 直達查詢 ──────────────────────────────────────────────────────────────
     stmt = (
-        select(
-            RouteStop.routeUid,
-            RouteStop.stopUid,
-            RouteStop.sequence,
-        )
+        select(RouteStop.routeUid, RouteStop.stopUid, RouteStop.sequence)
         .where(RouteStop.stopUid.in_(from_uids + to_uids))
         .order_by(RouteStop.routeUid, RouteStop.sequence)
     )
     rows = (await db.execute(stmt)).all()
 
-    # Group by route
     route_stops: dict[str, dict[str, int]] = {}
-    for row in rows:
-        route_uid, stop_uid, seq = row
+    for route_uid, stop_uid, seq in rows:
         route_stops.setdefault(route_uid, {})[stop_uid] = seq
 
-    direct_routes: list[tuple[str, int, int]] = []
+    direct: list[tuple[str, int, int]] = []
     for route_uid, stop_seqs in route_stops.items():
-        from_seq = next(
-            (stop_seqs[u] for u in from_uids if u in stop_seqs), None
-        )
-        to_seq = next(
-            (stop_seqs[u] for u in to_uids if u in stop_seqs), None
-        )
+        from_seq = next((stop_seqs[u] for u in from_uids if u in stop_seqs), None)
+        to_seq = next((stop_seqs[u] for u in to_uids if u in stop_seqs), None)
         if from_seq is not None and to_seq is not None and from_seq < to_seq:
-            direct_routes.append((route_uid, from_seq, to_seq))
+            direct.append((route_uid, from_seq, to_seq))
 
-    if not direct_routes:
-        return f"找不到從「{from_q}」到「{to_q}」的直達路線"
+    sections: list[str] = []
 
-    # Load route names
-    route_uids = [r[0] for r in direct_routes]
-    routes = (
-        await db.execute(select(BusRoute).where(BusRoute.uid.in_(route_uids)))
-    ).scalars().all()
-    uid_to_name = {r.uid: r.nameZh for r in routes}
+    if direct:
+        all_uids = [r[0] for r in direct]
+        uid_to_name = {
+            r.uid: r.nameZh
+            for r in (
+                await db.execute(select(BusRoute).where(BusRoute.uid.in_(all_uids)))
+            ).scalars().all()
+        }
+        direct_lines: list[str] = []
+        for route_uid, from_seq, to_seq in direct[:5]:
+            name = uid_to_name.get(route_uid, route_uid)
+            direct_lines.append(
+                f"  • {name}（第 {from_seq} 站上車，第 {to_seq} 站下車）"
+            )
+        sections.append("【直達】\n" + "\n".join(direct_lines))
 
-    lines: list[str] = []
-    for route_uid, from_seq, to_seq in direct_routes:
-        name = uid_to_name.get(route_uid, route_uid)
-        lines.append(f"{name}（第 {from_seq} 站 → 第 {to_seq} 站）")
-    return f"從「{from_q}」到「{to_q}」直達路線：\n" + "\n".join(lines)
+    # ── 轉乘查詢 ─────────────────────────────────────────────────────────────
+    if max_transfers >= 1:
+        transfers = await _find_transfer_routes(db, from_uids, to_uids, limit=3)
+        if transfers:
+            # Load all route & stop names needed
+            all_route_uids = list(
+                {t["leg1_route"] for t in transfers}
+                | {t["leg2_route"] for t in transfers}
+            )
+            all_stop_uids = list({t["transfer_uid"] for t in transfers})
+            uid_to_name2 = {
+                r.uid: r.nameZh
+                for r in (
+                    await db.execute(
+                        select(BusRoute).where(BusRoute.uid.in_(all_route_uids))
+                    )
+                ).scalars().all()
+            }
+            uid_to_stop_name = {
+                s.uid: s.nameZh
+                for s in (
+                    await db.execute(
+                        select(BusStop).where(BusStop.uid.in_(all_stop_uids))
+                    )
+                ).scalars().all()
+            }
+            transfer_lines: list[str] = []
+            for t in transfers:
+                r1 = uid_to_name2.get(t["leg1_route"], t["leg1_route"])
+                r2 = uid_to_name2.get(t["leg2_route"], t["leg2_route"])
+                xfer = uid_to_stop_name.get(t["transfer_uid"], t["transfer_uid"])
+                transfer_lines.append(f"  • 搭 {r1} 至「{xfer}」，轉 {r2}")
+            sections.append("【轉乘（一次）】\n" + "\n".join(transfer_lines))
+
+    if not sections:
+        suffix = "（含一次轉乘）" if max_transfers >= 1 else "（僅直達）"
+        return f"找不到從「{from_name}」到「{to_name}」的路線{suffix}"
+
+    header = f"從「{from_name}」到「{to_name}」："
+    return header + "\n\n" + "\n\n".join(sections)
+
+
+async def _find_transfer_routes(
+    db: AsyncSession,
+    from_uids: list[str],
+    to_uids: list[str],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Find routes requiring exactly one transfer via two SQL self-joins."""
+    if not from_uids or not to_uids:
+        return []
+
+    # Step 1: stops reachable downstream from from_uids (via any route)
+    reachable_rows = (await db.execute(
+        text("""
+            SELECT DISTINCT
+                rs1."routeUid"  AS leg1_route,
+                rs2."stopUid"   AS transfer_uid,
+                rs1.sequence    AS from_seq,
+                rs2.sequence    AS transfer_seq
+            FROM "RouteStop" rs1
+            JOIN "RouteStop" rs2
+                ON rs1."routeUid" = rs2."routeUid"
+               AND rs2.sequence   > rs1.sequence
+            WHERE rs1."stopUid" = ANY(:from_uids)
+            LIMIT 400
+        """),
+        {"from_uids": from_uids},
+    )).all()
+
+    if not reachable_rows:
+        return []
+
+    transfer_uids = list({r[1] for r in reachable_rows})
+    leg1_routes = list({r[0] for r in reachable_rows})
+
+    # Step 2: from transfer stops, find routes that reach to_stop
+    #         (must be a different route than leg1)
+    to_reach_rows = (await db.execute(
+        text("""
+            SELECT DISTINCT
+                rs3."stopUid"   AS transfer_uid,
+                rs3."routeUid"  AS leg2_route,
+                rs3.sequence    AS board_seq
+            FROM "RouteStop" rs3
+            JOIN "RouteStop" rs4
+                ON rs3."routeUid" = rs4."routeUid"
+               AND rs4.sequence   > rs3.sequence
+               AND rs4."stopUid"  = ANY(:to_uids)
+            WHERE rs3."stopUid"  = ANY(:transfer_uids)
+              AND rs3."routeUid" != ALL(:leg1_routes)
+            LIMIT 200
+        """),
+        {
+            "to_uids": to_uids,
+            "transfer_uids": transfer_uids,
+            "leg1_routes": leg1_routes,
+        },
+    )).all()
+
+    if not to_reach_rows:
+        return []
+
+    # Index step-1 by transfer_uid
+    reachable_by_transfer: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
+    for leg1_route, transfer_uid, from_seq, transfer_seq in reachable_rows:
+        reachable_by_transfer[transfer_uid].append((leg1_route, from_seq, transfer_seq))
+
+    results: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    for transfer_uid, leg2_route, board_seq in to_reach_rows:
+        for leg1_route, from_seq, transfer_seq in reachable_by_transfer.get(
+            transfer_uid, []
+        ):
+            if leg1_route == leg2_route:
+                continue
+            key = (leg1_route, transfer_uid, leg2_route)
+            if key in seen:
+                continue
+            seen.add(key)
+            results.append({
+                "leg1_route": leg1_route,
+                "leg2_route": leg2_route,
+                "transfer_uid": transfer_uid,
+                "from_seq": from_seq,
+                "transfer_seq": transfer_seq,
+                "board_seq": board_seq,
+            })
+            if len(results) >= limit:
+                return results
+
+    return results
 
 
 async def _list_stops(db: AsyncSession, route_query: str, direction: int) -> str:
