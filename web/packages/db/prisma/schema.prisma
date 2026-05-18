@@ -30,7 +30,7 @@ model Session {
   livekitRoom     String
   startedAt       DateTime     @default(now())
   endedAt         DateTime?
-  currentLocation Json?        // { lat: number, lng: number, label: string }
+  currentLocation Json? // { lat: number, lng: number, label: string }
 
   logs InteractionLog[]
 

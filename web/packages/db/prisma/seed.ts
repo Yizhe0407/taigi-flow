@@ -66,7 +66,7 @@ async function main() {
         "geo.route",
         "geo.poi_nearby",
       ],
-      isActive: false,
+      isActive: true,
     },
   });
 
