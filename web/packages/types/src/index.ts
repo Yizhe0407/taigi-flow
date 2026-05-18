@@ -2,8 +2,8 @@ import { z } from "zod";
 
 export const voiceConfigSchema = z.object({
   piperModel: z.string().min(1),
-  speed: z.number().positive().default(1.0),
-  pitch: z.number().default(0),
+  speed: z.number().min(0.5).max(2.0).default(1.0),
+  pitch: z.number().min(-10).max(10).default(0),
 });
 export type VoiceConfig = z.infer<typeof voiceConfigSchema>;
 
@@ -11,7 +11,7 @@ export const ragConfigSchema = z
   .object({
     enabled: z.boolean().default(false),
     collectionId: z.string().min(1),
-    topK: z.number().int().positive().default(3),
+    topK: z.number().int().min(1).max(10).default(3),
     threshold: z.number().min(0).max(1).default(0.7),
   })
   .nullable();

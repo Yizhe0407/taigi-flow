@@ -1,7 +1,7 @@
 import { prisma } from "@taigi-flow/db";
 import { pronunciationCreateSchema } from "@taigi-flow/types";
 import { z } from "zod";
-import { handleError, ok, parseJson } from "@/lib/api";
+import { error, handleError, ok, parseJson } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +42,11 @@ export async function POST(req: Request): Promise<Response> {
   try {
     const input = await parseJson(req, pronunciationCreateSchema);
     const profileId = input.profileId ?? null;
+
+    if (profileId) {
+      const profile = await prisma.agentProfile.findUnique({ where: { id: profileId }, select: { id: true } });
+      if (!profile) return error("AgentProfile not found", 404);
+    }
 
     const existing = await prisma.pronunciationEntry.findFirst({
       where: { profileId, term: input.term },

@@ -1,6 +1,6 @@
 import { prisma } from "@taigi-flow/db";
 import { sessionBatchDeleteSchema, sessionListQuerySchema } from "@taigi-flow/types";
-import { handleError, ok, parseJson } from "@/lib/api";
+import { error, handleError, ok, parseJson } from "@/lib/api";
 import { deleteSessionsBatch } from "@/lib/services/session.service";
 
 export const dynamic = "force-dynamic";
@@ -18,11 +18,17 @@ export async function GET(req: Request): Promise<Response> {
     if (query.status === "ended") {
       where.endedAt = { not: null };
     } else if (query.status === "active") {
+      const cutoff = new Date(Date.now() - STALE_MS);
       where.endedAt = null;
-      where.startedAt = { gte: new Date(Date.now() - STALE_MS) };
+      where.OR = [
+        { startedAt: { gte: cutoff } },
+        { logs: { some: { createdAt: { gte: cutoff } } } },
+      ];
     } else if (query.status === "stale") {
+      const cutoff = new Date(Date.now() - STALE_MS);
       where.endedAt = null;
-      where.startedAt = { lt: new Date(Date.now() - STALE_MS) };
+      where.startedAt = { lt: cutoff };
+      where.logs = { none: { createdAt: { gte: cutoff } } };
     }
 
     const orderBy = [
@@ -56,6 +62,14 @@ export async function GET(req: Request): Promise<Response> {
 export async function DELETE(req: Request): Promise<Response> {
   try {
     const body = await parseJson(req, sessionBatchDeleteSchema);
+
+    const activeCount = await prisma.session.count({
+      where: { id: { in: body.ids }, endedAt: null },
+    });
+    if (activeCount > 0) {
+      return error(`${activeCount} 個 Session 仍在進行中，無法刪除`, 409);
+    }
+
     const deleted = await deleteSessionsBatch(body.ids);
     return ok({ deleted });
   } catch (err) {

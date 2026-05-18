@@ -11,7 +11,8 @@ export default async function SessionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [session, turns] = await Promise.all([
+  const TURN_LIMIT = 500;
+  const [session, turns, totalTurns] = await Promise.all([
     prisma.session.findUnique({
       where: { id },
       include: { agentProfile: { select: { name: true } } },
@@ -19,7 +20,7 @@ export default async function SessionDetailPage({
     prisma.interactionLog.findMany({
       where: { sessionId: id },
       orderBy: { turnIndex: "asc" },
-      take: 500,
+      take: TURN_LIMIT,
       select: {
         id: true,
         turnIndex: true,
@@ -33,6 +34,7 @@ export default async function SessionDetailPage({
         errorFlag: true,
       },
     }),
+    prisma.interactionLog.count({ where: { sessionId: id } }),
   ]);
   if (!session) notFound();
 
@@ -46,12 +48,12 @@ export default async function SessionDetailPage({
             {new Date(session.startedAt).toLocaleString("zh-TW", {
               timeZone: "Asia/Taipei",
             })}
-            {" "}· {turns.length} 輪
+            {" "}· {totalTurns} 輪{turns.length < totalTurns ? `（顯示前 ${turns.length}）` : ""}
           </p>
         </div>
         <RefreshButton />
       </div>
-      <TurnTable turns={turns} />
+      <TurnTable turns={turns} totalCount={totalTurns} />
     </div>
   );
 }

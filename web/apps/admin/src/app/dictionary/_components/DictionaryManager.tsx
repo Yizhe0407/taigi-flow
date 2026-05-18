@@ -183,9 +183,8 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
     let failed = 0;
     try {
       const text = await file.text();
-      const lines = text.split(/\r?\n/).slice(1).filter(Boolean);
-      for (const line of lines) {
-        const cols = parseCsvLine(line);
+      const rows = parseCsv(text).slice(1).filter((r) => r.some(Boolean));
+      for (const cols of rows) {
         if (!cols[0] || !cols[1]) continue;
         const res = await fetch("/api/dictionary", {
           method: "POST",
@@ -417,22 +416,29 @@ export default function DictionaryManager({ globalEntries, agents }: Props) {
   );
 }
 
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = [];
   let cur = "";
   let inQuote = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
+  let row: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
     if (ch === '"') {
-      if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
+      if (inQuote && text[i + 1] === '"') { cur += '"'; i++; }
       else inQuote = !inQuote;
     } else if (ch === "," && !inQuote) {
-      result.push(cur);
-      cur = "";
+      row.push(cur); cur = "";
+    } else if (ch === "\r" && text[i + 1] === "\n" && !inQuote) {
+      i++;
+      row.push(cur); cur = "";
+      rows.push(row); row = [];
+    } else if (ch === "\n" && !inQuote) {
+      row.push(cur); cur = "";
+      rows.push(row); row = [];
     } else {
       cur += ch;
     }
   }
-  result.push(cur);
-  return result;
+  if (cur || row.length > 0) { row.push(cur); rows.push(row); }
+  return rows;
 }

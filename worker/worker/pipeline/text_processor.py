@@ -94,7 +94,7 @@ class TextProcessor:
             return
         result = await self._db_session.execute(self._dict_query())
         entries = list(result.scalars())
-        entries.sort(key=lambda e: (-e.priority, -len(e.term)))
+        entries.sort(key=lambda e: (-e.priority, -len(e.term), 0 if e.profileId else 1))
         self._dictionary = entries
         self._dict_last_updated = max(
             (e.updatedAt for e in entries), default=None
@@ -114,7 +114,8 @@ class TextProcessor:
         if self._dict_last_updated is None or db_max > self._dict_last_updated:
             result2 = await session.execute(self._dict_query())
             entries = list(result2.scalars())
-            entries.sort(key=lambda e: (-e.priority, -len(e.term)))
+            _sort_key = lambda e: (-e.priority, -len(e.term), 0 if e.profileId else 1)  # noqa: E731
+            entries.sort(key=_sort_key)
             self._dictionary = entries
             self._dict_last_updated = db_max
 

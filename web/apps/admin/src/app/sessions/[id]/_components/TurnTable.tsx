@@ -43,7 +43,7 @@ type Filter = { bargedIn: boolean; hasError: boolean; minLatency: string };
 
 type AddDictState = { logId: string; term: string; replacement: string };
 
-export default function TurnTable({ turns }: { turns: TurnView[] }) {
+export default function TurnTable({ turns, totalCount }: { turns: TurnView[]; totalCount?: number }) {
   const [filter, setFilter] = useState<Filter>({ bargedIn: false, hasError: false, minLatency: "" });
   const [addDict, setAddDict] = useState<AddDictState | null>(null);
   const [addBusy, setAddBusy] = useState(false);
@@ -75,8 +75,15 @@ export default function TurnTable({ turns }: { turns: TurnView[] }) {
     }
   }
 
+  const truncated = totalCount !== undefined && turns.length < totalCount;
+
   return (
     <div>
+      {truncated && (
+        <div className="mb-3 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-800">
+          僅顯示前 {turns.length} 輪（共 {totalCount} 輪）。篩選結果可能不完整。
+        </div>
+      )}
       {/* Filters */}
       <div className="flex items-center gap-4 mb-4 text-sm flex-wrap">
         <label className="flex items-center gap-1.5 cursor-pointer">

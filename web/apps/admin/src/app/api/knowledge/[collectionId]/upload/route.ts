@@ -6,7 +6,17 @@ import { error, handleError, ok } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-const UPLOAD_DIR = process.env.INGEST_UPLOAD_DIR ?? "/tmp/taigi-ingest";
+const UPLOAD_DIR = (() => {
+  const dir = process.env.INGEST_UPLOAD_DIR;
+  if (!dir) {
+    console.warn(
+      "[RAG upload] INGEST_UPLOAD_DIR not set — falling back to /tmp/taigi-ingest. " +
+      "Admin and worker must share the same persistent volume in production.",
+    );
+    return "/tmp/taigi-ingest";
+  }
+  return dir;
+})();
 const ALLOWED_EXTS = new Set([".pdf", ".md", ".txt", ".docx"]);
 const MAX_BYTES = 20 * 1024 * 1024; // 20 MB
 
@@ -57,7 +67,8 @@ export async function POST(req: Request, { params }: Ctx): Promise<Response> {
       throw err;
     }
 
-    return ok(job, { status: 201 });
+    const { filePath: _filePath, ...safeJob } = job;
+    return ok(safeJob, { status: 201 });
   } catch (err) {
     return handleError(err);
   }

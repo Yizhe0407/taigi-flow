@@ -14,6 +14,7 @@ export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> 
 
     const job = await prisma.ingestJob.findUnique({ where: { id: jobId } });
     if (!job || job.collectionId !== collectionId) return error("Job not found", 404);
+    if (job.status === "processing") return error("Job 正在處理中，無法刪除", 409);
 
     const srcName = path.basename(job.filePath);
     await prisma.$transaction(async (tx) => {

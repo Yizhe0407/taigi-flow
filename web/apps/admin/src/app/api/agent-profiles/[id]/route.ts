@@ -38,6 +38,21 @@ export async function PUT(req: Request, { params }: Ctx): Promise<Response> {
       ...(input.isActive !== undefined && { isActive: input.isActive }),
     };
 
+    if (input.isActive === false) {
+      const current = await prisma.agentProfile.findUnique({
+        where: { id },
+        select: { isActive: true },
+      });
+      if (current?.isActive) {
+        const otherActiveCount = await prisma.agentProfile.count({
+          where: { isActive: true, id: { not: id } },
+        });
+        if (otherActiveCount === 0) {
+          return error("至少須有一個啟用中的 Role，無法停用", 409);
+        }
+      }
+    }
+
     const profile = await updateAgentProfile(id, updateData, {
       exclusiveActivation: input.isActive === true,
     });
@@ -59,6 +74,14 @@ export async function DELETE(_req: Request, { params }: Ctx): Promise<Response> 
     if (profile.isActive) {
       return error("無法刪除啟用中的 Role，請先啟用另一個 Role", 409);
     }
+
+    const activeSessionCount = await prisma.session.count({
+      where: { agentProfileId: id, endedAt: null },
+    });
+    if (activeSessionCount > 0) {
+      return error(`此 Role 有 ${activeSessionCount} 個進行中 Session，無法刪除`, 409);
+    }
+
     await deleteAgentProfileCascade(id);
     return ok({ ok: true });
   } catch (err) {

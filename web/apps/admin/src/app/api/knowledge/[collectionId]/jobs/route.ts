@@ -15,7 +15,6 @@ export async function GET(_req: Request, { params }: Ctx): Promise<Response> {
       select: {
         id: true,
         fileName: true,
-        filePath: true,
         status: true,
         chunkCount: true,
         error: true,
