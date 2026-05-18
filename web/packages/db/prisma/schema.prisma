@@ -106,3 +106,74 @@ model IngestJob {
   @@index([status, createdAt])
   @@index([collectionId])
 }
+
+// ============ 公車路線 ============
+model BusOperator {
+  id     String @id
+  code   String
+  nameZh String
+  nameEn String
+
+  routes BusRoute[]
+}
+
+model BusRoute {
+  uid        String  @id
+  routeId    String
+  nameZh     String
+  nameEn     String
+  headsign   String?
+  direction  Int
+  city       String
+  operatorId String
+
+  operator  BusOperator   @relation(fields: [operatorId], references: [id])
+  stops     RouteStop[]
+  schedules BusSchedule[]
+
+  @@index([city])
+  @@index([nameZh])
+}
+
+model BusStop {
+  uid     String  @id
+  stopId  String
+  nameZh  String
+  nameEn  String
+  lat     Float
+  lng     Float
+  address String?
+  city    String
+
+  routeStops RouteStop[]
+
+  @@index([city])
+  @@index([nameZh])
+}
+
+model RouteStop {
+  routeUid String
+  stopUid  String
+  sequence Int
+  boarding Boolean @default(true)
+
+  route BusRoute @relation(fields: [routeUid], references: [uid])
+  stop  BusStop  @relation(fields: [stopUid], references: [uid])
+
+  @@id([routeUid, stopUid, sequence])
+  @@index([routeUid, sequence])
+  @@index([stopUid])
+}
+
+model BusSchedule {
+  id          String  @id @default(uuid())
+  routeUid    String
+  tripId      String
+  serviceDays Int
+  isLowFloor  Boolean @default(false)
+  stopTimes   Json
+
+  route BusRoute @relation(fields: [routeUid], references: [uid])
+
+  @@index([routeUid, serviceDays])
+}
