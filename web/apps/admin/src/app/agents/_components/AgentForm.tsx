@@ -29,11 +29,11 @@ type FormState = {
 };
 
 const AVAILABLE_TOOLS: { name: string; label: string; description: string }[] = [
-  { name: "bus.search_stops",   label: "bus.search_stops",   description: "模糊搜尋公車站名" },
-  { name: "bus.find_routes",    label: "bus.find_routes",    description: "查詢兩站之間的直達路線" },
-  { name: "bus.list_stops",     label: "bus.list_stops",     description: "列出路線完整停靠站序列" },
-  { name: "bus.next_departures",label: "bus.next_departures",description: "查詢今日接下來班次" },
-  { name: "tdx.bus_arrival",    label: "tdx.bus_arrival",    description: "TDX 即時到站時間" },
+  { name: "bus.search_stops",    label: "公車站搜尋",     description: "依站名關鍵字模糊搜尋停靠站" },
+  { name: "bus.find_routes",     label: "直達路線查詢",   description: "查詢兩站之間有哪些直達班次" },
+  { name: "bus.list_stops",      label: "路線停靠站列表", description: "列出指定路線的完整停靠站序列" },
+  { name: "bus.next_departures", label: "班次查詢",       description: "查詢今日某站接下來的發車時間" },
+  { name: "tdx.bus_arrival",     label: "即時到站（TDX）",description: "透過 TDX API 查詢公車即時到站時間（需 TDX 憑證）" },
 ];
 
 function profileToForm(p: AgentProfile): FormState {
@@ -230,7 +230,10 @@ export default function AgentForm({ profile }: { profile?: AgentProfile }) {
                       className="mt-0.5"
                     />
                     <div>
-                      <p className="text-sm font-mono font-medium leading-none">{tool.label}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium leading-none">{tool.label}</p>
+                        <span className="text-xs text-muted-foreground font-mono">{tool.name}</span>
+                      </div>
                       <p className="text-xs text-muted-foreground mt-0.5">{tool.description}</p>
                     </div>
                   </label>
